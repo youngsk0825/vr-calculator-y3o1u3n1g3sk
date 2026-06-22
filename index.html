@@ -324,9 +324,9 @@ function computeRound(prev, curPrice, curQty, roundDate){
   let action="hold", gap=0, tradeQty=0, tradeCash=0, newQty=curQty, newPool=poolBase;
   if(evalAmt < minB){
     action="buy";
-    // 평가금을 최소값(또는 V)까지 끌어올리기 위해 필요한 매수금 — 시트는 최소값 기준 단계매수
-    const targetCash = minB - evalAmt;             // 최소밴드 복귀에 필요한 금액
-    const limitCash = poolBase * (setup.buyLimit/100); // 매수한도
+    // 평가금을 목표선 V까지 끌어올리기 위해 필요한 매수금 (VR 원래 의도: 밴드 하단이 아니라 중심선 V로 복귀)
+    const targetCash = V - evalAmt;                // 목표선 V 복귀에 필요한 금액
+    const limitCash = poolBase * (setup.buyLimit/100); // 매수한도(사용자 설정)
     tradeCash = Math.min(targetCash, limitCash, poolBase);
     tradeQty = Math.floor(tradeCash / curPrice);
     tradeCash = r2(tradeQty*curPrice);
@@ -335,7 +335,7 @@ function computeRound(prev, curPrice, curQty, roundDate){
     gap = r2(minB - evalAmt);
   } else if(evalAmt > maxB){
     action="sell";
-    const targetCash = evalAmt - maxB;             // 최대밴드 복귀
+    const targetCash = evalAmt - V;                // 목표선 V 복귀 (매수와 대칭)
     tradeQty = Math.floor(targetCash / curPrice);
     tradeQty = Math.min(tradeQty, curQty);
     tradeCash = r2(tradeQty*curPrice);
