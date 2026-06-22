@@ -137,7 +137,17 @@
   <div class="layout">
     <!-- 좌: 입력 -->
     <aside>
-      <div class="card pad" style="margin-bottom:14px;">
+      <!-- 진입 선택 (데이터 없을 때만) -->
+      <div class="card pad" id="welcomeCard" style="margin-bottom:14px;display:none;">
+        <div class="ch"><span>시작하기</span></div>
+        <p style="font-size:12.5px;color:var(--ink-dim);margin-bottom:14px;">처음 시작하시나요, 아니면 백업한 기록을 이어가시나요?</p>
+        <button class="btn primary" id="startNew">새로 시작</button>
+        <button class="btn ghost mt8" id="startFromFile">백업 파일 불러오기</button>
+        <input type="file" id="welcomeFile" accept="application/json,.json" style="display:none;">
+        <div class="locked-note">백업은 회차 기록 탭의 "내보내기"로 만든 JSON 파일입니다.</div>
+      </div>
+
+      <div class="card pad" id="setupCard" style="margin-bottom:14px;display:none;">
         <div class="ch"><span>초기 세팅</span><button class="btn ghost" id="editSetup" style="display:none;width:auto;padding:4px 10px;font-size:11px;">수정</button></div>
         <div id="setupForm">
           <div class="g2">
@@ -357,6 +367,8 @@ function buildOrderTable(round){
 
 /* ==================== 렌더 ==================== */
 function renderSetupChips(){
+  $("welcomeCard").style.display="none";
+  $("setupCard").style.display="block";
   $("setupForm").style.display="none";
   $("editSetup").style.display="block";
   const c=$("setupChips"); c.style.display="flex";
@@ -370,6 +382,26 @@ function renderSetupChips(){
   $("roundCard").style.display="block";
   $("emptyState").style.display="none";
   $("dash").style.display="block";
+}
+
+/* ---- 진입 화면 제어 ---- */
+function showWelcome(){
+  $("welcomeCard").style.display="block";
+  $("setupCard").style.display="none";
+  $("roundCard").style.display="none";
+  $("emptyState").style.display="block";
+  $("dash").style.display="none";
+}
+function showSetupForm(prefill){
+  $("welcomeCard").style.display="none";
+  $("setupCard").style.display="block";
+  $("setupForm").style.display="block";
+  $("setupChips").style.display="none";
+  $("editSetup").style.display="none";
+  if(prefill){
+    $("startPool").value=10000; $("contrib").value=0; $("gval").value=13;
+    $("startQty").value=483; $("startPrice").value=76.83; $("qtyStep").value=4; $("buyLimit").value=25;
+  }
 }
 
 function renderAction(rd){
@@ -561,6 +593,39 @@ $("undoRound").addEventListener("click",()=>{
   toast("마지막 회차 취소됨");
 });
 
+/* ---- 파일 데이터로 복원(공통) ---- */
+function loadFromData(data){
+  if(!data.setup || !Array.isArray(data.history)) throw new Error("형식 오류");
+  setup=data.setup; history=data.history; pending=null;
+  persist();
+  $("startPool").value=setup.startPool; $("contrib").value=setup.contrib;
+  $("gval").value=setup.G; $("startQty").value=setup.startQty;
+  $("startPrice").value=setup.startPrice; $("qtyStep").value=setup.qtyStep;
+  $("buyLimit").value=setup.buyLimit;
+  renderSetupChips();
+  if(history.length){
+    const last=history[history.length-1];
+    $("curPrice").value=last.price; $("curQty").value=last.newQty;
+    $("undoRound").style.display=history.length>1?"block":"none";
+    $("commitRound").style.display="none";
+  }
+  refreshAll(null);
+}
+
+/* ---- 진입 화면 버튼 ---- */
+$("startNew").addEventListener("click",()=>showSetupForm(true));
+$("startFromFile").addEventListener("click",()=>$("welcomeFile").click());
+$("welcomeFile").addEventListener("change",e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{ loadFromData(JSON.parse(reader.result)); toast(`${history.length}회차 불러옴`); }
+    catch(err){ toast("불러오기 실패: 파일 형식 확인"); }
+    $("welcomeFile").value="";
+  };
+  reader.readAsText(file);
+});
+
 $("copyHist").addEventListener("click",()=>{
   if(!history.length)return;
   const lines=history.map(h=>`${h.roundNo}회 | 종가 ${num(h.price,2)} | 평가금 ${num(h.evalAmt)} | V ${num(h.V)} | ${h.action==="hold"?"대기":h.action==="buy"?"매수 "+h.tradeQty:"매도 "+h.tradeQty} | 수익률 ${num(h.roi*100,1)}%`);
@@ -591,21 +656,7 @@ $("importFile").addEventListener("change",e=>{
       const data=JSON.parse(reader.result);
       if(!data.setup || !Array.isArray(data.history)) throw new Error("형식 오류");
       if(!confirm(`현재 기록을 덮어쓰고 ${data.history.length}회차 데이터를 불러올까요?`)){ $("importFile").value=""; return; }
-      setup=data.setup; history=data.history; pending=null;
-      persist();
-      // 입력칸 복원
-      $("startPool").value=setup.startPool; $("contrib").value=setup.contrib;
-      $("gval").value=setup.G; $("startQty").value=setup.startQty;
-      $("startPrice").value=setup.startPrice; $("qtyStep").value=setup.qtyStep;
-      $("buyLimit").value=setup.buyLimit;
-      renderSetupChips();
-      if(history.length){
-        const last=history[history.length-1];
-        $("curPrice").value=last.price; $("curQty").value=last.newQty;
-        $("undoRound").style.display=history.length>1?"block":"none";
-        $("commitRound").style.display="none";
-      }
-      refreshAll(null);
+      loadFromData(data);
       toast(`${history.length}회차 불러옴`);
     }catch(err){ toast("불러오기 실패: 파일 형식 확인"); }
     $("importFile").value="";
@@ -641,7 +692,7 @@ function refreshAll(previewRd){
 /* ---- 초기 로드 ---- */
 restore();
 if(setup){
-  // 입력칸 복원
+  // 저장된 데이터가 있으면 바로 복원
   $("startPool").value=setup.startPool; $("contrib").value=setup.contrib;
   $("gval").value=setup.G;
   $("startQty").value=setup.startQty; $("startPrice").value=setup.startPrice;
@@ -654,11 +705,8 @@ if(setup){
     refreshAll(null);
   }
 } else {
-  // 예시 기본값(VR1기 근사) — 시작 V는 483×76.83 으로 자동 산출됨
-  $("startPool").value=10000; $("contrib").value=0;
-  $("gval").value=13;
-  $("startQty").value=483; $("startPrice").value=76.83;
-  $("qtyStep").value=4; $("buyLimit").value=25;
+  // 완전 첫 시작 → 진입 선택 화면
+  showWelcome();
 }
 </script>
 </body>
