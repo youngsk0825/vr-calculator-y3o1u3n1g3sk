@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VR 밸류 리밸런싱 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg:#0b0f14; --surface:#131a22; --surface-2:#1a232e; --line:#26313d;
+    --ink:#e9eef4; --ink-dim:#8e9aab; --ink-faint:#5d6878;
+    --band:#4a9fd4;             /* 목표선 V — 차분한 블루 */
+    --band-soft:rgba(74,159,212,0.10);
+    --buy:#3fb98a;              /* 매수(하단 이탈) */
+    --sell:#e0894a;            /* 매도(상단 이탈) */
+    --hold:#8e9aab;
+    --pos:#3fb98a; --neg:#e0635f;
+    --display:'Fraunces',serif; --body:'Inter',sans-serif; --mono:'JetBrains Mono',monospace;
+    --r:12px;
+  }
+  [data-theme="light"]{
+    --bg:#f5f3ee; --surface:#ffffff; --surface-2:#efece5; --line:#e0dccf;
+    --ink:#23282f; --ink-dim:#5f6875; --ink-faint:#9aa0ab;
+    --band:#2d7cb0; --band-soft:rgba(45,124,176,0.08);
+    --buy:#1f9d6f; --sell:#bf6a28;
+    --pos:#1f9d6f; --neg:#cf4b47;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.55;}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:-0.01em;}
+  button{cursor:pointer;font-family:var(--body);}
+
+  .wrap{max-width:1140px;margin:0 auto;padding:22px 16px 70px;}
+  @media(max-width:820px){.wrap{padding:14px 12px 50px;}}
+
+  header.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:20px;}
+  .brand .kick{font-family:var(--mono);font-size:11px;letter-spacing:0.2em;color:var(--band);text-transform:uppercase;}
+  .brand h1{font-size:25px;margin-top:5px;}
+  .brand p{color:var(--ink-dim);font-size:12.5px;margin-top:5px;max-width:580px;}
+  .tbtn{flex-shrink:0;background:var(--surface);border:1px solid var(--line);color:var(--ink-dim);border-radius:9px;padding:8px 12px;font-size:12px;}
+  .tbtn:hover{color:var(--ink);border-color:var(--band);}
+
+  .layout{display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:start;}
+  @media(max-width:820px){.layout{grid-template-columns:1fr;}}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);}
+  .pad{padding:16px;}
+  .ch{font-family:var(--mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-dim);font-weight:600;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
+
+  .field{margin-bottom:11px;}
+  .field label{display:block;font-size:12px;color:var(--ink-dim);margin-bottom:4px;}
+  .field label small{color:var(--ink-faint);}
+  .iw{position:relative;display:flex;align-items:center;}
+  .field input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--ink);font-family:var(--mono);font-size:14px;padding:9px 34px 9px 10px;}
+  .field input:focus{outline:none;border-color:var(--band);}
+  .field .u{position:absolute;right:10px;font-size:11px;color:var(--ink-faint);pointer-events:none;}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+
+  .btn{border-radius:8px;padding:11px;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);width:100%;}
+  .btn.primary{background:var(--band);border-color:var(--band);color:#06121b;}
+  .btn:hover{border-color:var(--band);}
+  .btn.ghost{background:none;}
+  .btn.danger:hover{border-color:var(--neg);color:var(--neg);}
+  .mt8{margin-top:8px;} .mt14{margin-top:14px;}
+
+  .locked-note{font-size:11px;color:var(--ink-faint);margin-top:8px;line-height:1.5;}
+  .setup-chips{display:none;flex-wrap:wrap;gap:7px;}
+  .chip{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-family:var(--mono);font-size:11.5px;}
+  .chip b{color:var(--band);}
+
+  /* 액션 배너 */
+  .action{border-radius:var(--r);padding:18px;margin-bottom:16px;border:1px solid;display:flex;gap:16px;align-items:center;}
+  .action .big{font-family:var(--display);font-size:26px;font-weight:600;line-height:1;}
+  .action .lab{font-family:var(--mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px;}
+  .action.buy{background:rgba(63,185,138,0.08);border-color:var(--buy);}
+  .action.buy .big,.action.buy .lab{color:var(--buy);}
+  .action.sell{background:rgba(224,137,74,0.09);border-color:var(--sell);}
+  .action.sell .big,.action.sell .lab{color:var(--sell);}
+  .action.hold{background:var(--surface-2);border-color:var(--line);}
+  .action.hold .big{color:var(--ink);} .action.hold .lab{color:var(--ink-dim);}
+  .action .detail{font-size:12.5px;color:var(--ink-dim);margin-top:4px;}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+  @media(max-width:680px){.kpis{grid-template-columns:repeat(2,1fr);}}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:13px 14px;}
+  .kpi .k{font-size:11px;color:var(--ink-dim);margin-bottom:6px;}
+  .kpi .v{font-family:var(--mono);font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;}
+  .kpi .v.pos{color:var(--pos);} .kpi .v.neg{color:var(--neg);}
+  .kpi .s{font-size:10.5px;color:var(--ink-faint);margin-top:3px;font-family:var(--mono);}
+
+  .chart-card{margin-bottom:16px;}
+  .chart-card canvas{max-height:300px;}
+
+  .tabs{display:flex;gap:3px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto;}
+  .tabs button{background:none;border:none;border-bottom:2px solid transparent;color:var(--ink-dim);padding:9px 13px;font-size:13px;font-weight:600;white-space:nowrap;}
+  .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--band);}
+  .tp{display:none;} .tp.active{display:block;}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th,td{text-align:right;padding:8px 9px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  th:first-child,td:first-child{text-align:left;}
+  thead th{color:var(--ink-dim);font-weight:600;font-size:11px;text-transform:uppercase;position:sticky;top:0;background:var(--surface);}
+  tbody td{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  tbody tr:hover{background:var(--surface-2);}
+  .scroll{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);}
+  td.buy{color:var(--buy);} td.sell{color:var(--sell);}
+  .badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:5px;font-family:var(--mono);}
+  .badge.buy{background:rgba(63,185,138,0.15);color:var(--buy);}
+  .badge.sell{background:rgba(224,137,74,0.15);color:var(--sell);}
+  .badge.hold{background:var(--surface-2);color:var(--ink-faint);}
+
+  .empty{color:var(--ink-faint);font-size:13px;text-align:center;padding:30px 10px;}
+  .disc{background:rgba(224,99,95,0.06);border:1px solid var(--neg);border-radius:var(--r);padding:12px 14px;margin-top:14px;}
+  .disc p{color:var(--neg);font-size:11.5px;margin-bottom:3px;}
+  .disc p:last-child{margin-bottom:0;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--band);color:#06121b;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;transition:.2s;pointer-events:none;z-index:50;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .formula code{font-family:var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 11px;display:block;font-size:12px;margin:6px 0;overflow-x:auto;}
+  .formula p{color:var(--ink-dim);font-size:12.5px;margin-bottom:6px;}
+  .formula h3{font-size:14px;margin:14px 0 6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="kick">Value Rebalancing · TQQQ</div>
+      <h1>VR 리밸런싱 대시보드</h1>
+      <p>목표선(V) 주변 ±15% 밴드를 정해두고, 평가금이 밴드를 벗어날 때만 사고팔아 되돌리는 라오어 VR 투자법. 회차(2주)마다 종가·보유개수만 입력하면 다음 행동과 지정가 주문표를 계산합니다.</p>
+    </div>
+    <button class="tbtn" id="themeBtn">◐ 테마</button>
+  </header>
+
+  <div class="layout">
+    <!-- 좌: 입력 -->
+    <aside>
+      <div class="card pad" style="margin-bottom:14px;">
+        <div class="ch"><span>초기 세팅</span><button class="btn ghost" id="editSetup" style="display:none;width:auto;padding:4px 10px;font-size:11px;">수정</button></div>
+        <div id="setupForm">
+          <div class="g2">
+            <div class="field"><label>시작 Pool <small>(예산)</small></label><div class="iw"><input type="number" id="startPool" step="100"><span class="u">$</span></div></div>
+            <div class="field"><label>회차당 적립금</label><div class="iw"><input type="number" id="contrib" step="10"><span class="u">$</span></div></div>
+          </div>
+          <div class="g2">
+            <div class="field"><label>시작 보유개수</label><div class="iw"><input type="number" id="startQty" step="1"><span class="u">주</span></div></div>
+            <div class="field"><label>시작 종가</label><div class="iw"><input type="number" id="startPrice" step="0.01"><span class="u">$</span></div></div>
+          </div>
+          <div class="g2">
+            <div class="field"><label>G값 <small>(분모)</small></label><div class="iw"><input type="number" id="gval" step="1"><span class="u">G</span></div></div>
+            <div class="field"><label>개수간격</label><div class="iw"><input type="number" id="qtyStep" step="1"><span class="u">주</span></div></div>
+          </div>
+          <div class="field"><label>매수한도</label><div class="iw"><input type="number" id="buyLimit" step="5"><span class="u">%</span></div></div>
+          <button class="btn primary mt8" id="saveSetup">세팅 저장 · 1회차 시작</button>
+          <div class="locked-note">시작 목표선 V는 <b>시작 보유개수 × 시작 종가</b>로 자동 설정됩니다. 밴드폭은 V의 ±15%로 고정됩니다(시트 기준).</div>
+        </div>
+        <div class="setup-chips" id="setupChips"></div>
+      </div>
+
+      <div class="card pad" id="roundCard" style="display:none;">
+        <div class="ch"><span>이번 회차 입력</span><span class="mono" id="roundNoLabel" style="color:var(--band)"></span></div>
+        <div class="g2">
+          <div class="field"><label>현재 종가</label><div class="iw"><input type="number" id="curPrice" step="0.01"><span class="u">$</span></div></div>
+          <div class="field"><label>현재 보유개수</label><div class="iw"><input type="number" id="curQty" step="1"><span class="u">주</span></div></div>
+        </div>
+        <button class="btn primary" id="calcRound">이번 회차 계산</button>
+        <button class="btn ghost mt8" id="commitRound" style="display:none;">이대로 기록하고 다음 회차로 →</button>
+        <button class="btn ghost danger mt8" id="undoRound" style="display:none;">마지막 회차 취소</button>
+      </div>
+    </aside>
+
+    <!-- 우: 결과 -->
+    <main>
+      <div id="emptyState" class="card pad empty">초기 세팅을 저장하면 VR 대시보드가 시작됩니다.</div>
+
+      <div id="dash" style="display:none;">
+        <div class="action hold" id="actionBanner">
+          <div>
+            <div class="lab" id="actLab">대기 · HOLD</div>
+            <div class="big" id="actBig">밴드 안</div>
+            <div class="detail" id="actDetail"></div>
+          </div>
+        </div>
+
+        <div class="kpis" id="kpis"></div>
+
+        <div class="card chart-card pad">
+          <div class="ch"><span>목표선 V · 트리거 밴드 · 평가금 추이</span></div>
+          <canvas id="bandChart"></canvas>
+        </div>
+
+        <div class="tabs" role="tablist">
+          <button role="tab" aria-selected="true" data-tab="orders">지정가 주문표</button>
+          <button role="tab" aria-selected="false" data-tab="history">회차 기록</button>
+          <button role="tab" aria-selected="false" data-tab="alloc">자산 배분</button>
+          <button role="tab" aria-selected="false" data-tab="formula">공식 설명</button>
+        </div>
+
+        <section class="tp active" id="tp-orders">
+          <div class="card pad">
+            <div class="ch"><span id="orderTitle">지정가 주문표</span></div>
+            <div class="scroll"><table id="orderTable"><thead></thead><tbody></tbody></table></div>
+          </div>
+        </section>
+
+        <section class="tp" id="tp-history">
+          <div class="card pad">
+            <div class="ch"><span>회차별 기록</span><span style="display:flex;gap:6px;">
+              <button class="btn ghost" id="exportData" style="width:auto;padding:4px 10px;font-size:11px;">내보내기</button>
+              <button class="btn ghost" id="importData" style="width:auto;padding:4px 10px;font-size:11px;">불러오기</button>
+              <button class="btn ghost" id="copyHist" style="width:auto;padding:4px 10px;font-size:11px;">요약 복사</button>
+            </span></div>
+            <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
+            <div class="scroll"><table id="histTable"><thead></thead><tbody></tbody></table></div>
+          </div>
+        </section>
+
+        <section class="tp" id="tp-alloc">
+          <div class="card pad">
+            <div class="ch"><span>주식 vs 현금 비중 추이</span></div>
+            <canvas id="allocChart" style="max-height:260px;"></canvas>
+          </div>
+        </section>
+
+        <section class="tp" id="tp-formula">
+          <div class="card pad formula" id="formulaBody"></div>
+        </section>
+
+        <div class="disc">
+          <p>이 앱은 투자 조언이 아니라 계산 보조 도구입니다.</p>
+          <p>실제 체결가, 슬리피지, 세금·수수료, 유동성에 따라 결과는 달라질 수 있습니다.</p>
+          <p>TQQQ 등 레버리지 ETF는 변동성과 손실 위험이 매우 큽니다.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+/* ====================================================================
+   VR(밸류 리밸런싱) 엔진 — 시트 공식 그대로
+   매직넘버:
+   - 0.85 / 1.15 : 트리거 밴드 = 목표선 V의 ±15% (시트 H=V*0.85, I=V*1.15)
+   - V공식: 이번V = 직전V + 직전Pool/G + (직전평가금-직전V)/(2*√G) + 적립금
+   - 밴드 지정가: 매수점 = 최소값 / 직전잔여개수, 매도점 = 최대값 / 직전잔여개수
+                 개수간격(qtyStep)씩 잔여개수를 늘리며(매수)/줄이며(매도) 단계 생성
+   - 매수한도 : 한 회차에 Pool의 몇 %까지 매수에 쓸지 제한
+==================================================================== */
+const SK="vr_setup_v1", HK="vr_history_v1";
+const $=id=>document.getElementById(id);
+let setup=null, history=[], pending=null, charts={};
+
+/* ---- 유틸 ---- */
+function r2(n){return Math.round(n*100)/100;}
+function money(n,d=0){return n==null||Number.isNaN(n)?"—":"$"+Number(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});}
+function num(n,d=0){return n==null||Number.isNaN(n)?"—":Number(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});}
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600);}
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+/* ---- 저장/복원 ---- */
+function persist(){ try{ localStorage.setItem(SK,JSON.stringify(setup)); localStorage.setItem(HK,JSON.stringify(history)); }catch(e){} }
+function restore(){
+  try{
+    const s=localStorage.getItem(SK), h=localStorage.getItem(HK);
+    if(s) setup=JSON.parse(s);
+    if(h) history=JSON.parse(h);
+  }catch(e){}
+}
+
+/* ---- V값 다음 회차 계산 (시트 G열) ---- */
+function nextV(prevV, prevPool, prevEval, G, contrib){
+  return r2(prevV + prevPool/G + (prevEval-prevV)/(2*Math.sqrt(G))) + contrib;
+}
+
+/* ---- 한 회차 상태 계산 ---- */
+function computeRound(prev, curPrice, curQty){
+  // prev: 직전 회차 기록 {V,pool,qty,price,...} | 1회차면 setup 기반
+  const G=setup.G, contrib=setup.contrib;
+  let V;
+  if(prev==null){ V=setup.startV; }
+  else { V=nextV(prev.V, prev.pool, prev.evalAmt, G, contrib); }
+  const minB=r2(V*0.85), maxB=r2(V*1.15);
+  const evalAmt=r2(curQty*curPrice);
+  // 직전 Pool에 이번 회차 적립금 더함(시트 K열: N(L)+적립금)
+  const poolBase = prev==null ? setup.startPool : r2(prev.pool + contrib);
+  // 투자원금: 시작 시점엔 (시작 Pool + 시작 주식 매입금) 전체 투입 자본, 이후 회차마다 적립금 누적
+  const startPrincipal = setup.startPool + r2(setup.startQty*setup.startPrice);
+  const principal = prev==null ? r2(startPrincipal) : r2((prev.principal||startPrincipal) + contrib);
+
+  // 밴드 판정
+  let action="hold", gap=0, tradeQty=0, tradeCash=0, newQty=curQty, newPool=poolBase;
+  if(evalAmt < minB){
+    action="buy";
+    // 평가금을 최소값(또는 V)까지 끌어올리기 위해 필요한 매수금 — 시트는 최소값 기준 단계매수
+    const targetCash = minB - evalAmt;             // 최소밴드 복귀에 필요한 금액
+    const limitCash = poolBase * (setup.buyLimit/100); // 매수한도
+    tradeCash = Math.min(targetCash, limitCash, poolBase);
+    tradeQty = Math.floor(tradeCash / curPrice);
+    tradeCash = r2(tradeQty*curPrice);
+    newQty = curQty + tradeQty;
+    newPool = r2(poolBase - tradeCash);
+    gap = r2(minB - evalAmt);
+  } else if(evalAmt > maxB){
+    action="sell";
+    const targetCash = evalAmt - maxB;             // 최대밴드 복귀
+    tradeQty = Math.floor(targetCash / curPrice);
+    tradeQty = Math.min(tradeQty, curQty);
+    tradeCash = r2(tradeQty*curPrice);
+    newQty = curQty - tradeQty;
+    newPool = r2(poolBase + tradeCash);
+    gap = r2(evalAmt - maxB);
+  }
+  const evalAfter = r2(newQty*curPrice);
+  const account = r2(newPool + evalAfter);
+  const roi = principal>0 ? account/principal-1 : 0;
+  return {
+    roundNo: prev==null?1:(prev.roundNo+1),
+    V, minB, maxB, price:curPrice, qty:curQty,
+    evalAmt, action, gap, tradeQty, tradeCash,
+    newQty, pool:newPool, principal, evalAfter, account, roi,
+    poolBefore: poolBase
+  };
+}
+
+/* ---- 단계별 지정가 주문표 (시트 U~AC) ---- */
+function buildOrderTable(round){
+  const step=setup.qtyStep, rows=[];
+  const baseQty = round.qty;
+  if(round.action==="buy" || round.action==="hold"){
+    // 매수 밴드: 잔여개수를 step씩 늘리며 최소값/직전잔여 가격 생성
+    let rem=baseQty, pool=round.poolBefore;
+    for(let i=1;i<=12;i++){
+      const price = r2(round.minB / rem);
+      const spend = r2(price*step);
+      pool = r2(pool - spend);
+      rows.push({step:i, side:"buy", qty:step, price, remAfter:rem+step, poolAfter:pool});
+      rem += step;
+      if(pool<=0) break;
+    }
+  }
+  const sellRows=[];
+  if(round.action==="sell" || round.action==="hold"){
+    let rem=baseQty, pool=round.poolBefore;
+    for(let i=1;i<=12;i++){
+      const price = r2(round.maxB / rem);
+      const gain = r2(price*step);
+      pool = r2(pool + gain);
+      rem -= step;
+      if(rem<0) break;
+      sellRows.push({step:i, side:"sell", qty:step, price, remAfter:rem, poolAfter:pool});
+    }
+  }
+  return {buy:rows, sell:sellRows};
+}
+
+/* ==================== 렌더 ==================== */
+function renderSetupChips(){
+  $("setupForm").style.display="none";
+  $("editSetup").style.display="block";
+  const c=$("setupChips"); c.style.display="flex";
+  c.innerHTML=`
+    <span class="chip">Pool <b>${money(setup.startPool)}</b></span>
+    <span class="chip">적립 <b>${money(setup.contrib)}</b></span>
+    <span class="chip">시작V <b>${money(setup.startV)}</b> <small style="color:var(--ink-faint)">자동</small></span>
+    <span class="chip">G <b>${setup.G}</b></span>
+    <span class="chip">간격 <b>${setup.qtyStep}주</b></span>
+    <span class="chip">한도 <b>${setup.buyLimit}%</b></span>`;
+  $("roundCard").style.display="block";
+  $("emptyState").style.display="none";
+  $("dash").style.display="block";
+}
+
+function renderAction(rd){
+  const b=$("actionBanner");
+  b.className="action "+rd.action;
+  const map={buy:["매수 · BUY",`${rd.tradeQty}주 매수`], sell:["매도 · SELL",`${rd.tradeQty}주 매도`], hold:["대기 · HOLD","밴드 안 — 거래 없음"]};
+  $("actLab").textContent=map[rd.action][0];
+  $("actBig").textContent=map[rd.action][1];
+  let det;
+  if(rd.action==="buy") det=`평가금 ${money(rd.evalAmt)} < 최소 ${money(rd.minB)} · 약 ${money(rd.tradeCash)} 투입해 밴드 복귀`;
+  else if(rd.action==="sell") det=`평가금 ${money(rd.evalAmt)} > 최대 ${money(rd.maxB)} · 약 ${money(rd.tradeCash)} 회수해 밴드 복귀`;
+  else det=`평가금 ${money(rd.evalAmt)} 은 밴드 ${money(rd.minB)} ~ ${money(rd.maxB)} 안에 있습니다`;
+  $("actDetail").textContent=det;
+}
+
+function renderKpis(rd){
+  const cards=[
+    {k:"목표선 V",v:money(rd.V),s:`밴드 ${money(rd.minB)}~${money(rd.maxB)}`},
+    {k:"현재 평가금",v:money(rd.evalAmt),s:`${num(rd.qty)}주 × ${money(rd.price,2)}`},
+    {k:"Pool(현금)",v:money(rd.pool),s:"거래 후 잔액"},
+    {k:"계좌총액",v:money(rd.account),s:"Pool + 평가금"},
+    {k:"수익률",v:(rd.roi>=0?"+":"")+num(rd.roi*100,2)+"%",s:`원금 ${money(rd.principal)}`,cls:rd.roi>=0?"pos":"neg"},
+    {k:"손익",v:(rd.account-rd.principal>=0?"+":"")+money(rd.account-rd.principal),s:"누적",cls:rd.account-rd.principal>=0?"pos":"neg"},
+    {k:"이번 거래",v:rd.action==="hold"?"없음":`${rd.tradeQty}주`,s:rd.action==="hold"?"밴드 안":(rd.action==="buy"?"매수":"매도")},
+    {k:"회차",v:rd.roundNo+"회차",s:"2주 단위"},
+  ];
+  $("kpis").innerHTML=cards.map(c=>`<div class="kpi"><div class="k">${c.k}</div><div class="v ${c.cls||''}">${c.v}</div><div class="s">${c.s}</div></div>`).join("");
+}
+
+function renderOrders(rd){
+  const o=buildOrderTable(rd);
+  $("orderTitle").textContent = rd.action==="buy"?"매수 지정가 주문표 (하락 대비)"
+    : rd.action==="sell"?"매도 지정가 주문표 (상승 대비)"
+    : "지정가 주문표 (양방향 대비)";
+  let html="";
+  if(o.buy.length){
+    html+=`<tr><th>매수단계</th><th>수량</th><th>매수 지정가</th><th>매수 후 개수</th><th>Pool 잔액</th></tr>`;
+    html=`<thead>${html}</thead><tbody>`+o.buy.map(x=>
+      `<tr><td><span class="badge buy">B${x.step}</span></td><td>${x.qty}</td><td class="buy">${money(x.price,2)}</td><td>${num(x.remAfter)}</td><td>${money(x.poolAfter)}</td></tr>`).join("");
+    if(o.sell.length) html+=`<tr><td colspan="5" style="border-top:2px solid var(--line)"></td></tr>`;
+  } else html="<thead></thead><tbody>";
+  if(o.sell.length){
+    if(!o.buy.length) html=`<thead><tr><th>매도단계</th><th>수량</th><th>매도 지정가</th><th>매도 후 개수</th><th>Pool 잔액</th></tr></thead><tbody>`;
+    html+=o.sell.map(x=>
+      `<tr><td><span class="badge sell">S${x.step}</span></td><td>${x.qty}</td><td class="sell">${money(x.price,2)}</td><td>${num(x.remAfter)}</td><td>${money(x.poolAfter)}</td></tr>`).join("");
+  }
+  html+="</tbody>";
+  $("orderTable").innerHTML=html;
+}
+
+function renderHistory(){
+  const t=$("histTable");
+  if(!history.length){ t.innerHTML="<thead></thead><tbody><tr><td class='empty'>아직 기록된 회차가 없습니다.</td></tr></tbody>"; return; }
+  const head="<tr><th>회차</th><th>종가</th><th>개수</th><th>평가금</th><th>V</th><th>최소</th><th>최대</th><th>액션</th><th>거래</th><th>Pool</th><th>계좌총액</th><th>수익률</th></tr>";
+  const body=history.map(h=>`<tr>
+    <td>${h.roundNo}</td><td>${money(h.price,2)}</td><td>${num(h.qty)}</td>
+    <td>${money(h.evalAmt)}</td><td>${money(h.V)}</td><td>${money(h.minB)}</td><td>${money(h.maxB)}</td>
+    <td><span class="badge ${h.action}">${h.action==="buy"?"매수":h.action==="sell"?"매도":"대기"}</span></td>
+    <td>${h.action==="hold"?"—":h.tradeQty+"주"}</td>
+    <td>${money(h.pool)}</td><td>${money(h.account)}</td>
+    <td style="color:${h.roi>=0?'var(--pos)':'var(--neg)'}">${(h.roi>=0?"+":"")+num(h.roi*100,1)}%</td>
+  </tr>`).join("");
+  t.innerHTML=`<thead>${head}</thead><tbody>${body}</tbody>`;
+}
+
+/* ---- 차트 ---- */
+function renderCharts(previewRd){
+  const rows=[...history];
+  if(previewRd && (!history.length || previewRd.roundNo>history.length)) rows.push(previewRd);
+  const labels=rows.map(r=>r.roundNo+"회");
+  const band=cssVar("--band"), buy=cssVar("--buy"), dim=cssVar("--ink-dim"), line=cssVar("--line");
+  const grid={color:line}, ticks={color:dim,font:{family:"JetBrains Mono",size:10}};
+  // 밴드 차트
+  if(charts.band) charts.band.destroy();
+  charts.band=new Chart($("bandChart"),{
+    type:"line",
+    data:{labels,datasets:[
+      {label:"최대 (V×1.15)",data:rows.map(r=>r.maxB),borderColor:cssVar("--sell"),borderWidth:1,borderDash:[4,3],pointRadius:0,fill:false,tension:.2},
+      {label:"목표선 V",data:rows.map(r=>r.V),borderColor:band,borderWidth:2,pointRadius:0,fill:false,tension:.2},
+      {label:"최소 (V×0.85)",data:rows.map(r=>r.minB),borderColor:buy,borderWidth:1,borderDash:[4,3],pointRadius:0,fill:"-2",backgroundColor:cssVar("--band-soft"),tension:.2},
+      {label:"평가금",data:rows.map(r=>r.evalAmt),borderColor:cssVar("--ink"),borderWidth:2,pointRadius:3,pointBackgroundColor:cssVar("--ink"),fill:false,tension:.1},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{color:dim,font:{size:11},boxWidth:12}}},
+      scales:{x:{grid,ticks},y:{grid,ticks:Object.assign({},ticks,{callback:v=>"$"+(v/1000).toFixed(0)+"k"})}}}
+  });
+  // 자산배분 차트
+  if(charts.alloc) charts.alloc.destroy();
+  charts.alloc=new Chart($("allocChart"),{
+    type:"bar",
+    data:{labels,datasets:[
+      {label:"평가금",data:rows.map(r=>r.evalAfter!=null?r.evalAfter:r.evalAmt),backgroundColor:band,stack:"a"},
+      {label:"Pool",data:rows.map(r=>r.pool),backgroundColor:cssVar("--surface-2"),borderColor:line,borderWidth:1,stack:"a"},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:dim,font:{size:11},boxWidth:12}}},
+      scales:{x:{grid,ticks,stacked:true},y:{grid,ticks:Object.assign({},ticks,{callback:v=>"$"+(v/1000).toFixed(0)+"k"}),stacked:true}}}
+  });
+}
+
+function renderFormula(){
+  $("formulaBody").innerHTML=`
+    <h3>목표선 V (매 회차 갱신)</h3>
+    <p>VR의 핵심. 현금을 조금씩 목표로 옮기고(Pool/G), 시장 이탈을 절반쯤 추종((평가금−V)/2√G)하며, 적립금을 더해 목표선을 우상향시킵니다.</p>
+    <code>이번 V = 직전 V + 직전Pool ÷ G + (직전평가금 − 직전V) ÷ (2 × √G) + 적립금</code>
+    <h3>트리거 밴드 (±15% 고정)</h3>
+    <code>최소 = V × 0.85   최대 = V × 1.15</code>
+    <p>평가금이 <b style="color:var(--buy)">최소 아래면 매수</b>, <b style="color:var(--sell)">최대 위면 매도</b>, 사이면 대기.</p>
+    <h3>단계별 지정가 (시트 밴드표)</h3>
+    <code>매수 지정가 = 최소값 ÷ 직전 잔여개수
+매도 지정가 = 최대값 ÷ 직전 잔여개수</code>
+    <p>개수간격(${setup?setup.qtyStep:"n"}주)씩 잔여개수를 바꿔가며 여러 지정가를 미리 깔아둡니다. 매수한도(${setup?setup.buyLimit:"n"}%)는 한 회차 Pool 사용 상한입니다.</p>`;
+}
+
+/* ==================== 액션 ==================== */
+function readSetup(){
+  const startQty=parseFloat($("startQty").value);
+  const startPrice=parseFloat($("startPrice").value);
+  return {
+    startPool:parseFloat($("startPool").value),
+    contrib:parseFloat($("contrib").value),
+    startV: r2(startQty*startPrice),   // 시작 V = 시작 보유개수 × 시작 종가 (자동)
+    G:parseFloat($("gval").value),
+    startQty, startPrice,
+    qtyStep:parseInt($("qtyStep").value,10),
+    buyLimit:parseFloat($("buyLimit").value),
+  };
+}
+function validSetup(s){
+  const e=[];
+  if(!(s.startPool>0))e.push("시작 Pool");
+  if(Number.isNaN(s.contrib)||s.contrib<0)e.push("적립금");
+  if(!(s.G>=1))e.push("G값(1 이상)");
+  if(!(s.startQty>0))e.push("시작 보유개수(1 이상)");
+  if(!(s.startPrice>0))e.push("시작 종가");
+  if(!(s.startV>0))e.push("시작 보유개수·종가(목표선 산출 불가)");
+  if(!(s.qtyStep>=1))e.push("개수간격(1 이상)");
+  if(!(s.buyLimit>0&&s.buyLimit<=100))e.push("매수한도(1~100%)");
+  return e;
+}
+
+$("saveSetup").addEventListener("click",()=>{
+  const s=readSetup(); const e=validSetup(s);
+  if(e.length){ toast("확인 필요: "+e.join(", ")); return; }
+  setup=s;
+  // 1회차를 시작 입력값으로 자동 기록
+  const rd=computeRound(null, s.startPrice, s.startQty);
+  history=[rd];
+  persist();
+  renderSetupChips();
+  $("curPrice").value=s.startPrice; $("curQty").value=rd.newQty;
+  refreshAll(null);
+  toast("1회차 시작됨");
+});
+
+$("editSetup").addEventListener("click",()=>{
+  $("setupForm").style.display="block";
+  $("setupChips").style.display="none";
+  $("editSetup").style.display="none";
+});
+
+$("calcRound").addEventListener("click",()=>{
+  const price=parseFloat($("curPrice").value), qty=parseFloat($("curQty").value);
+  if(!(price>0)||Number.isNaN(qty)||qty<0){ toast("종가와 보유개수를 확인하세요"); return; }
+  const prev=history[history.length-1];
+  pending=computeRound(prev, price, qty);
+  refreshAll(pending);
+  $("commitRound").style.display="block";
+  $("undoRound").style.display = history.length>1 ? "block":"none";
+});
+
+$("commitRound").addEventListener("click",()=>{
+  if(!pending) return;
+  history.push(pending);
+  persist();
+  pending=null;
+  $("commitRound").style.display="none";
+  $("undoRound").style.display="block";
+  $("curQty").value=history[history.length-1].newQty;
+  refreshAll(null);
+  toast(history.length+"회차 기록됨");
+});
+
+$("undoRound").addEventListener("click",()=>{
+  if(history.length<=1){ toast("1회차는 취소할 수 없습니다"); return; }
+  history.pop(); persist(); pending=null;
+  $("commitRound").style.display="none";
+  refreshAll(null);
+  toast("마지막 회차 취소됨");
+});
+
+$("copyHist").addEventListener("click",()=>{
+  if(!history.length)return;
+  const lines=history.map(h=>`${h.roundNo}회 | 종가 ${num(h.price,2)} | 평가금 ${num(h.evalAmt)} | V ${num(h.V)} | ${h.action==="hold"?"대기":h.action==="buy"?"매수 "+h.tradeQty:"매도 "+h.tradeQty} | 수익률 ${num(h.roi*100,1)}%`);
+  navigator.clipboard.writeText(lines.join("\n")).then(()=>toast("복사됨")).catch(()=>toast("복사 실패"));
+});
+
+/* ---- 내보내기: 세팅+기록 전체를 JSON 파일로 ---- */
+$("exportData").addEventListener("click",()=>{
+  if(!setup){ toast("저장할 데이터가 없습니다"); return; }
+  const payload={ app:"VR-rebalancing", version:1, exportedAt:new Date().toISOString(), setup, history };
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  const d=new Date(); const stamp=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+  a.href=url; a.download=`VR백업_${history.length}회차_${stamp}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast("백업 파일 저장됨");
+});
+
+/* ---- 불러오기: JSON 파일에서 복원 ---- */
+$("importData").addEventListener("click",()=>$("importFile").click());
+$("importFile").addEventListener("change",e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(reader.result);
+      if(!data.setup || !Array.isArray(data.history)) throw new Error("형식 오류");
+      if(!confirm(`현재 기록을 덮어쓰고 ${data.history.length}회차 데이터를 불러올까요?`)){ $("importFile").value=""; return; }
+      setup=data.setup; history=data.history; pending=null;
+      persist();
+      // 입력칸 복원
+      $("startPool").value=setup.startPool; $("contrib").value=setup.contrib;
+      $("gval").value=setup.G; $("startQty").value=setup.startQty;
+      $("startPrice").value=setup.startPrice; $("qtyStep").value=setup.qtyStep;
+      $("buyLimit").value=setup.buyLimit;
+      renderSetupChips();
+      if(history.length){
+        const last=history[history.length-1];
+        $("curPrice").value=last.price; $("curQty").value=last.newQty;
+        $("undoRound").style.display=history.length>1?"block":"none";
+        $("commitRound").style.display="none";
+      }
+      refreshAll(null);
+      toast(`${history.length}회차 불러옴`);
+    }catch(err){ toast("불러오기 실패: 파일 형식 확인"); }
+    $("importFile").value="";
+  };
+  reader.readAsText(file);
+});
+
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-selected",x===b));
+  document.querySelectorAll(".tp").forEach(p=>p.classList.remove("active"));
+  $("tp-"+b.dataset.tab).classList.add("active");
+}));
+
+$("themeBtn").addEventListener("click",()=>{
+  const cur=document.documentElement.getAttribute("data-theme");
+  document.documentElement.setAttribute("data-theme",cur==="dark"?"light":"dark");
+  if(setup) refreshAll(pending);
+});
+
+/* ---- 화면 갱신 ---- */
+function refreshAll(previewRd){
+  const showRd = previewRd || history[history.length-1];
+  if(!showRd) return;
+  $("roundNoLabel").textContent = (previewRd?previewRd.roundNo:history.length+1)+"회차";
+  renderAction(showRd);
+  renderKpis(showRd);
+  renderOrders(showRd);
+  renderHistory();
+  renderFormula();
+  renderCharts(previewRd);
+}
+
+/* ---- 초기 로드 ---- */
+restore();
+if(setup){
+  // 입력칸 복원
+  $("startPool").value=setup.startPool; $("contrib").value=setup.contrib;
+  $("gval").value=setup.G;
+  $("startQty").value=setup.startQty; $("startPrice").value=setup.startPrice;
+  $("qtyStep").value=setup.qtyStep; $("buyLimit").value=setup.buyLimit;
+  renderSetupChips();
+  if(history.length){
+    const last=history[history.length-1];
+    $("curPrice").value=last.price; $("curQty").value=last.newQty;
+    $("undoRound").style.display = history.length>1?"block":"none";
+    refreshAll(null);
+  }
+} else {
+  // 예시 기본값(VR1기 근사) — 시작 V는 483×76.83 으로 자동 산출됨
+  $("startPool").value=10000; $("contrib").value=0;
+  $("gval").value=13;
+  $("startQty").value=483; $("startPrice").value=76.83;
+  $("qtyStep").value=4; $("buyLimit").value=25;
+}
+</script>
+</body>
+</html>
