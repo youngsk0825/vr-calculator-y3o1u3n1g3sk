@@ -159,7 +159,7 @@
             <div class="field"><label>시작 종가</label><div class="iw"><input type="number" id="startPrice" step="0.01"><span class="u">$</span></div></div>
           </div>
           <div class="g2">
-            <div class="field"><label>G값 <small>(분모)</small></label><div class="iw"><input type="number" id="gval" step="1"><span class="u">G</span></div></div>
+            <div class="field"><label>투자 시작일 <small>(G값 자동산출)</small></label><div class="iw" style="padding-right:0;"><input type="date" id="startDate" style="font-family:var(--mono);font-size:13px;padding:9px 10px;"></div></div>
             <div class="field"><label>개수간격</label><div class="iw"><input type="number" id="qtyStep" step="1"><span class="u">주</span></div></div>
           </div>
           <div class="field"><label>매수한도</label><div class="iw"><input type="number" id="buyLimit" step="5"><span class="u">%</span></div></div>
@@ -175,6 +175,7 @@
           <div class="field"><label>현재 종가</label><div class="iw"><input type="number" id="curPrice" step="0.01"><span class="u">$</span></div></div>
           <div class="field"><label>현재 보유개수</label><div class="iw"><input type="number" id="curQty" step="1"><span class="u">주</span></div></div>
         </div>
+        <div class="field"><label>이번 회차 날짜 <small>(G값 산출 기준)</small></label><div class="iw" style="padding-right:0;"><input type="date" id="roundDate" style="font-family:var(--mono);font-size:13px;padding:9px 10px;"></div></div>
         <button class="btn primary" id="calcRound">이번 회차 계산</button>
         <button class="btn ghost mt8" id="commitRound" style="display:none;">이대로 기록하고 다음 회차로 →</button>
         <button class="btn ghost danger mt8" id="undoRound" style="display:none;">마지막 회차 취소</button>
@@ -279,15 +280,35 @@ function restore(){
   }catch(e){}
 }
 
+/* ---- G값(분모) 자동 계산 — 시트 규칙: 투자 연차에 따라 매년 +1, 1년차=10부터 시작
+   회차를 거르거나 늦게 기록해도 정확하도록, 회차 수가 아니라 "투자 시작일로부터 실제 경과 주차"로 연차를 산출 */
+function calcG(startDate, asOfDate){
+  if(!startDate) return 13; // 시작일 미설정 시 시트 기본값(13)으로 안전 처리
+  const ms = new Date(asOfDate) - new Date(startDate);
+  const weeks = Math.max(0, ms/(1000*60*60*24*7));
+  if(weeks<52) return 10;
+  if(weeks<52*2) return 11;
+  if(weeks<52*3) return 12;
+  if(weeks<52*4) return 13;
+  if(weeks<52*5) return 14;
+  if(weeks<52*6) return 15;
+  if(weeks<52*7) return 16;
+  if(weeks<52*8) return 17;
+  if(weeks<52*9) return 18;
+  return 19; // 9년차 이상은 시트와 동일하게 19로 고정
+}
+
 /* ---- V값 다음 회차 계산 (시트 G열) ---- */
 function nextV(prevV, prevPool, prevEval, G, contrib){
   return r2(prevV + prevPool/G + (prevEval-prevV)/(2*Math.sqrt(G))) + contrib;
 }
 
 /* ---- 한 회차 상태 계산 ---- */
-function computeRound(prev, curPrice, curQty){
+function computeRound(prev, curPrice, curQty, roundDate){
   // prev: 직전 회차 기록 {V,pool,qty,price,...} | 1회차면 setup 기반
-  const G=setup.G, contrib=setup.contrib;
+  const roundNo = prev==null?1:(prev.roundNo+1);
+  const asOf = roundDate || new Date().toISOString().slice(0,10);
+  const G=calcG(setup.startDate, asOf), contrib=setup.contrib;   // G값은 시작일로부터 경과한 실제 연차로 자동 산출
   let V;
   if(prev==null){ V=setup.startV; }
   else { V=nextV(prev.V, prev.pool, prev.evalAmt, G, contrib); }
@@ -326,7 +347,7 @@ function computeRound(prev, curPrice, curQty){
   const account = r2(newPool + evalAfter);
   const roi = principal>0 ? account/principal-1 : 0;
   return {
-    roundNo: prev==null?1:(prev.roundNo+1),
+    roundNo, G, date: asOf,
     V, minB, maxB, price:curPrice, qty:curQty,
     evalAmt, action, gap, tradeQty, tradeCash,
     newQty, pool:newPool, principal, evalAfter, account, roi,
@@ -372,11 +393,13 @@ function renderSetupChips(){
   $("setupForm").style.display="none";
   $("editSetup").style.display="block";
   const c=$("setupChips"); c.style.display="flex";
+  const todayG = calcG(setup.startDate, new Date().toISOString().slice(0,10));
   c.innerHTML=`
     <span class="chip">Pool <b>${money(setup.startPool)}</b></span>
     <span class="chip">적립 <b>${money(setup.contrib)}</b></span>
     <span class="chip">시작V <b>${money(setup.startV)}</b> <small style="color:var(--ink-faint)">자동</small></span>
-    <span class="chip">G <b>${setup.G}</b></span>
+    <span class="chip">시작일 <b>${setup.startDate}</b></span>
+    <span class="chip">현재 G <b>${todayG}</b> <small style="color:var(--ink-faint)">자동</small></span>
     <span class="chip">간격 <b>${setup.qtyStep}주</b></span>
     <span class="chip">한도 <b>${setup.buyLimit}%</b></span>`;
   $("roundCard").style.display="block";
@@ -399,7 +422,9 @@ function showSetupForm(prefill){
   $("setupChips").style.display="none";
   $("editSetup").style.display="none";
   if(prefill){
-    $("startPool").value=10000; $("contrib").value=0; $("gval").value=13;
+    // G=13이 나오도록 시작일을 약 4년 전(3~4년차 구간)으로 예시 설정
+    const d=new Date(); d.setFullYear(d.getFullYear()-4);
+    $("startPool").value=10000; $("contrib").value=0; $("startDate").value=d.toISOString().slice(0,10);
     $("startQty").value=483; $("startPrice").value=76.83; $("qtyStep").value=4; $("buyLimit").value=25;
   }
 }
@@ -426,7 +451,7 @@ function renderKpis(rd){
     {k:"수익률",v:(rd.roi>=0?"+":"")+num(rd.roi*100,2)+"%",s:`원금 ${money(rd.principal)}`,cls:rd.roi>=0?"pos":"neg"},
     {k:"손익",v:(rd.account-rd.principal>=0?"+":"")+money(rd.account-rd.principal),s:"누적",cls:rd.account-rd.principal>=0?"pos":"neg"},
     {k:"이번 거래",v:rd.action==="hold"?"없음":`${rd.tradeQty}주`,s:rd.action==="hold"?"밴드 안":(rd.action==="buy"?"매수":"매도")},
-    {k:"회차",v:rd.roundNo+"회차",s:"2주 단위"},
+    {k:"회차",v:rd.roundNo+"회차",s:`G=${rd.G} · ${rd.date}`},
   ];
   $("kpis").innerHTML=cards.map(c=>`<div class="kpi"><div class="k">${c.k}</div><div class="v ${c.cls||''}">${c.v}</div><div class="s">${c.s}</div></div>`).join("");
 }
@@ -455,9 +480,9 @@ function renderOrders(rd){
 function renderHistory(){
   const t=$("histTable");
   if(!history.length){ t.innerHTML="<thead></thead><tbody><tr><td class='empty'>아직 기록된 회차가 없습니다.</td></tr></tbody>"; return; }
-  const head="<tr><th>회차</th><th>종가</th><th>개수</th><th>평가금</th><th>V</th><th>최소</th><th>최대</th><th>액션</th><th>거래</th><th>Pool</th><th>계좌총액</th><th>수익률</th></tr>";
+  const head="<tr><th>회차</th><th>날짜</th><th>G</th><th>종가</th><th>개수</th><th>평가금</th><th>V</th><th>최소</th><th>최대</th><th>액션</th><th>거래</th><th>Pool</th><th>계좌총액</th><th>수익률</th></tr>";
   const body=history.map(h=>`<tr>
-    <td>${h.roundNo}</td><td>${money(h.price,2)}</td><td>${num(h.qty)}</td>
+    <td>${h.roundNo}</td><td>${h.date||"—"}</td><td>${h.G||"—"}</td><td>${money(h.price,2)}</td><td>${num(h.qty)}</td>
     <td>${money(h.evalAmt)}</td><td>${money(h.V)}</td><td>${money(h.minB)}</td><td>${money(h.maxB)}</td>
     <td><span class="badge ${h.action}">${h.action==="buy"?"매수":h.action==="sell"?"매도":"대기"}</span></td>
     <td>${h.action==="hold"?"—":h.tradeQty+"주"}</td>
@@ -507,6 +532,9 @@ function renderFormula(){
     <h3>목표선 V (매 회차 갱신)</h3>
     <p>VR의 핵심. 현금을 조금씩 목표로 옮기고(Pool/G), 시장 이탈을 절반쯤 추종((평가금−V)/2√G)하며, 적립금을 더해 목표선을 우상향시킵니다.</p>
     <code>이번 V = 직전 V + 직전Pool ÷ G + (직전평가금 − 직전V) ÷ (2 × √G) + 적립금</code>
+    <h3>G값 (분모, 투자 연차에 따라 자동 증가)</h3>
+    <p>G는 투자 시작일로부터 지난 연차입니다. 1년차=10에서 시작해 해마다 1씩 커지며(2년차=11, 3년차=12…), G가 커질수록 V가 현금·시장 변화에 더 둔감하고 보수적으로 움직입니다. 9년차부터는 19로 고정됩니다.</p>
+    <code>경과 ${'<'} 1년 → G=10   경과 ${'<'} 2년 → G=11   …   경과 ${'≥'} 9년 → G=19</code>
     <h3>트리거 밴드 (±15% 고정)</h3>
     <code>최소 = V × 0.85   최대 = V × 1.15</code>
     <p>평가금이 <b style="color:var(--buy)">최소 아래면 매수</b>, <b style="color:var(--sell)">최대 위면 매도</b>, 사이면 대기.</p>
@@ -524,7 +552,7 @@ function readSetup(){
     startPool:parseFloat($("startPool").value),
     contrib:parseFloat($("contrib").value),
     startV: r2(startQty*startPrice),   // 시작 V = 시작 보유개수 × 시작 종가 (자동)
-    G:parseFloat($("gval").value),
+    startDate: $("startDate").value,   // G값은 이 날짜 기준 경과 연차로 매 회차 자동 산출
     startQty, startPrice,
     qtyStep:parseInt($("qtyStep").value,10),
     buyLimit:parseFloat($("buyLimit").value),
@@ -534,7 +562,7 @@ function validSetup(s){
   const e=[];
   if(!(s.startPool>0))e.push("시작 Pool");
   if(Number.isNaN(s.contrib)||s.contrib<0)e.push("적립금");
-  if(!(s.G>=1))e.push("G값(1 이상)");
+  if(!s.startDate)e.push("투자 시작일");
   if(!(s.startQty>0))e.push("시작 보유개수(1 이상)");
   if(!(s.startPrice>0))e.push("시작 종가");
   if(!(s.startV>0))e.push("시작 보유개수·종가(목표선 산출 불가)");
@@ -547,12 +575,15 @@ $("saveSetup").addEventListener("click",()=>{
   const s=readSetup(); const e=validSetup(s);
   if(e.length){ toast("확인 필요: "+e.join(", ")); return; }
   setup=s;
-  // 1회차를 시작 입력값으로 자동 기록
-  const rd=computeRound(null, s.startPrice, s.startQty);
+  // 1회차를 시작 입력값으로 자동 기록 (1회차 날짜 = 투자 시작일)
+  const rd=computeRound(null, s.startPrice, s.startQty, s.startDate);
   history=[rd];
   persist();
   renderSetupChips();
   $("curPrice").value=s.startPrice; $("curQty").value=rd.newQty;
+  // 다음 회차 입력 날짜는 시작일+14일을 기본값으로 제안
+  const next=new Date(s.startDate); next.setDate(next.getDate()+14);
+  $("roundDate").value=next.toISOString().slice(0,10);
   refreshAll(null);
   toast("1회차 시작됨");
 });
@@ -565,9 +596,11 @@ $("editSetup").addEventListener("click",()=>{
 
 $("calcRound").addEventListener("click",()=>{
   const price=parseFloat($("curPrice").value), qty=parseFloat($("curQty").value);
+  const roundDate=$("roundDate").value;
   if(!(price>0)||Number.isNaN(qty)||qty<0){ toast("종가와 보유개수를 확인하세요"); return; }
+  if(!roundDate){ toast("이번 회차 날짜를 입력하세요"); return; }
   const prev=history[history.length-1];
-  pending=computeRound(prev, price, qty);
+  pending=computeRound(prev, price, qty, roundDate);
   refreshAll(pending);
   $("commitRound").style.display="block";
   $("undoRound").style.display = history.length>1 ? "block":"none";
@@ -581,6 +614,8 @@ $("commitRound").addEventListener("click",()=>{
   $("commitRound").style.display="none";
   $("undoRound").style.display="block";
   $("curQty").value=history[history.length-1].newQty;
+  const next=new Date(history[history.length-1].date); next.setDate(next.getDate()+14);
+  $("roundDate").value=next.toISOString().slice(0,10);
   refreshAll(null);
   toast(history.length+"회차 기록됨");
 });
@@ -599,13 +634,15 @@ function loadFromData(data){
   setup=data.setup; history=data.history; pending=null;
   persist();
   $("startPool").value=setup.startPool; $("contrib").value=setup.contrib;
-  $("gval").value=setup.G; $("startQty").value=setup.startQty;
+  $("startDate").value=setup.startDate; $("startQty").value=setup.startQty;
   $("startPrice").value=setup.startPrice; $("qtyStep").value=setup.qtyStep;
   $("buyLimit").value=setup.buyLimit;
   renderSetupChips();
   if(history.length){
     const last=history[history.length-1];
     $("curPrice").value=last.price; $("curQty").value=last.newQty;
+    const next=new Date(last.date); next.setDate(next.getDate()+14);
+    $("roundDate").value=next.toISOString().slice(0,10);
     $("undoRound").style.display=history.length>1?"block":"none";
     $("commitRound").style.display="none";
   }
@@ -694,13 +731,15 @@ restore();
 if(setup){
   // 저장된 데이터가 있으면 바로 복원
   $("startPool").value=setup.startPool; $("contrib").value=setup.contrib;
-  $("gval").value=setup.G;
+  $("startDate").value=setup.startDate;
   $("startQty").value=setup.startQty; $("startPrice").value=setup.startPrice;
   $("qtyStep").value=setup.qtyStep; $("buyLimit").value=setup.buyLimit;
   renderSetupChips();
   if(history.length){
     const last=history[history.length-1];
     $("curPrice").value=last.price; $("curQty").value=last.newQty;
+    const next=new Date(last.date); next.setDate(next.getDate()+14);
+    $("roundDate").value=next.toISOString().slice(0,10);
     $("undoRound").style.display = history.length>1?"block":"none";
     refreshAll(null);
   }
