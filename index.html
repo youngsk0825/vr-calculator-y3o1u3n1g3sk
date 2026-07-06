@@ -175,6 +175,7 @@
           <div class="field"><label>현재 종가</label><div class="iw"><input type="number" id="curPrice" step="0.01"><span class="u">$</span></div></div>
           <div class="field"><label>현재 보유개수</label><div class="iw"><input type="number" id="curQty" step="1"><span class="u">주</span></div></div>
         </div>
+        <div class="field"><label>현재 Pool 잔액 <small>(증권사 예수금 그대로)</small></label><div class="iw"><input type="number" id="curPool" step="0.01"><span class="u">$</span></div></div>
         <div class="field"><label>이번 회차 날짜 <small>(G값 산출 기준)</small></label><div class="iw" style="padding-right:0;"><input type="date" id="roundDate" style="font-family:var(--mono);font-size:13px;padding:9px 10px;"></div></div>
         <button class="btn primary" id="calcRound">이번 회차 계산</button>
         <button class="btn ghost mt8" id="commitRound" style="display:none;">이대로 기록하고 다음 회차로 →</button>
@@ -304,7 +305,7 @@ function nextV(prevV, prevPool, prevEval, G, contrib){
 }
 
 /* ---- 한 회차 상태 계산 ---- */
-function computeRound(prev, curPrice, curQty, roundDate){
+function computeRound(prev, curPrice, curQty, roundDate, curPool){
   // prev: 직전 회차 기록 {V,pool,qty,price,...} | 1회차면 setup 기반
   const roundNo = prev==null?1:(prev.roundNo+1);
   const asOf = roundDate || new Date().toISOString().slice(0,10);
@@ -314,8 +315,11 @@ function computeRound(prev, curPrice, curQty, roundDate){
   else { V=nextV(prev.V, prev.pool, prev.evalAmt, G, contrib); }
   const minB=r2(V*0.85), maxB=r2(V*1.15);
   const evalAmt=r2(curQty*curPrice);
-  // 직전 Pool에 이번 회차 적립금 더함(시트 K열: N(L)+적립금)
-  const poolBase = prev==null ? setup.startPool : r2(prev.pool + contrib);
+  // Pool: 사용자가 입력한 실제 잔액(증권사 예수금)을 그대로 사용.
+  // 미입력 시(하위호환) 기존 방식(직전 Pool + 적립금)으로 대체
+  const poolBase = (curPool!=null && !Number.isNaN(curPool))
+    ? r2(curPool)
+    : (prev==null ? setup.startPool : r2(prev.pool + contrib));
   // 투자원금: 시작 시점엔 (시작 Pool + 시작 주식 매입금) 전체 투입 자본, 이후 회차마다 적립금 누적
   const startPrincipal = setup.startPool + r2(setup.startQty*setup.startPrice);
   const principal = prev==null ? r2(startPrincipal) : r2((prev.principal||startPrincipal) + contrib);
@@ -596,11 +600,13 @@ $("editSetup").addEventListener("click",()=>{
 
 $("calcRound").addEventListener("click",()=>{
   const price=parseFloat($("curPrice").value), qty=parseFloat($("curQty").value);
+  const curPool=parseFloat($("curPool").value);
   const roundDate=$("roundDate").value;
   if(!(price>0)||Number.isNaN(qty)||qty<0){ toast("종가와 보유개수를 확인하세요"); return; }
+  if(Number.isNaN(curPool)||curPool<0){ toast("현재 Pool 잔액(예수금)을 입력하세요"); return; }
   if(!roundDate){ toast("이번 회차 날짜를 입력하세요"); return; }
   const prev=history[history.length-1];
-  pending=computeRound(prev, price, qty, roundDate);
+  pending=computeRound(prev, price, qty, roundDate, curPool);
   refreshAll(pending);
   $("commitRound").style.display="block";
   $("undoRound").style.display = history.length>1 ? "block":"none";
@@ -613,8 +619,12 @@ $("commitRound").addEventListener("click",()=>{
   pending=null;
   $("commitRound").style.display="none";
   $("undoRound").style.display="block";
-  $("curQty").value=history[history.length-1].newQty;
-  const next=new Date(history[history.length-1].date); next.setDate(next.getDate()+14);
+  const last=history[history.length-1];
+  $("curQty").value=last.newQty;
+  // Pool은 실제 잔액을 새로 입력받아야 하므로 비우고, 앱 예상값을 참고용 placeholder로 표시
+  $("curPool").value="";
+  $("curPool").placeholder="예상 "+Math.round(last.pool + setup.contrib);
+  const next=new Date(last.date); next.setDate(next.getDate()+14);
   $("roundDate").value=next.toISOString().slice(0,10);
   refreshAll(null);
   toast(history.length+"회차 기록됨");
@@ -641,6 +651,8 @@ function loadFromData(data){
   if(history.length){
     const last=history[history.length-1];
     $("curPrice").value=last.price; $("curQty").value=last.newQty;
+    $("curPool").value="";
+    $("curPool").placeholder="예상 "+Math.round(last.pool + setup.contrib);
     const next=new Date(last.date); next.setDate(next.getDate()+14);
     $("roundDate").value=next.toISOString().slice(0,10);
     $("undoRound").style.display=history.length>1?"block":"none";
@@ -738,6 +750,8 @@ if(setup){
   if(history.length){
     const last=history[history.length-1];
     $("curPrice").value=last.price; $("curQty").value=last.newQty;
+    $("curPool").value="";
+    $("curPool").placeholder="예상 "+Math.round(last.pool + setup.contrib);
     const next=new Date(last.date); next.setDate(next.getDate()+14);
     $("roundDate").value=next.toISOString().slice(0,10);
     $("undoRound").style.display = history.length>1?"block":"none";
