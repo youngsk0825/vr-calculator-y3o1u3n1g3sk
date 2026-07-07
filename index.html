@@ -151,18 +151,18 @@
         <div class="ch"><span>초기 세팅</span><button class="btn ghost" id="editSetup" style="display:none;width:auto;padding:4px 10px;font-size:11px;">수정</button></div>
         <div id="setupForm">
           <div class="g2">
-            <div class="field"><label>시작 Pool <small>(예산)</small></label><div class="iw"><input type="number" id="startPool" step="100"><span class="u">$</span></div></div>
-            <div class="field"><label>회차당 적립금</label><div class="iw"><input type="number" id="contrib" step="10"><span class="u">$</span></div></div>
+            <div class="field"><label>시작 Pool <small>(예산)</small></label><div class="iw"><input type="number" inputmode="decimal" id="startPool" step="100"><span class="u">$</span></div></div>
+            <div class="field"><label>회차당 적립금</label><div class="iw"><input type="number" inputmode="decimal" id="contrib" step="10"><span class="u">$</span></div></div>
           </div>
           <div class="g2">
-            <div class="field"><label>시작 보유개수</label><div class="iw"><input type="number" id="startQty" step="1"><span class="u">주</span></div></div>
-            <div class="field"><label>시작 종가</label><div class="iw"><input type="number" id="startPrice" step="0.01"><span class="u">$</span></div></div>
+            <div class="field"><label>시작 보유개수</label><div class="iw"><input type="number" inputmode="decimal" id="startQty" step="1"><span class="u">주</span></div></div>
+            <div class="field"><label>시작 종가</label><div class="iw"><input type="number" inputmode="decimal" id="startPrice" step="0.01"><span class="u">$</span></div></div>
           </div>
           <div class="g2">
             <div class="field"><label>투자 시작일 <small>(G값 자동산출)</small></label><div class="iw" style="padding-right:0;"><input type="date" id="startDate" style="font-family:var(--mono);font-size:13px;padding:9px 10px;"></div></div>
-            <div class="field"><label>개수간격</label><div class="iw"><input type="number" id="qtyStep" step="1"><span class="u">주</span></div></div>
+            <div class="field"><label>개수간격</label><div class="iw"><input type="number" inputmode="decimal" id="qtyStep" step="1"><span class="u">주</span></div></div>
           </div>
-          <div class="field"><label>매수한도</label><div class="iw"><input type="number" id="buyLimit" step="5"><span class="u">%</span></div></div>
+          <div class="field"><label>매수한도</label><div class="iw"><input type="number" inputmode="decimal" id="buyLimit" step="5"><span class="u">%</span></div></div>
           <button class="btn primary mt8" id="saveSetup">세팅 저장 · 1회차 시작</button>
           <div class="locked-note">시작 목표선 V는 <b>시작 보유개수 × 시작 종가</b>로 자동 설정됩니다. 밴드폭은 V의 ±15%로 고정됩니다(시트 기준).</div>
         </div>
@@ -172,10 +172,10 @@
       <div class="card pad" id="roundCard" style="display:none;">
         <div class="ch"><span>이번 회차 입력</span><span class="mono" id="roundNoLabel" style="color:var(--band)"></span></div>
         <div class="g2">
-          <div class="field"><label>현재 종가</label><div class="iw"><input type="number" id="curPrice" step="0.01"><span class="u">$</span></div></div>
-          <div class="field"><label>현재 보유개수</label><div class="iw"><input type="number" id="curQty" step="1"><span class="u">주</span></div></div>
+          <div class="field"><label>현재 종가</label><div class="iw"><input type="number" inputmode="decimal" id="curPrice" step="0.01"><span class="u">$</span></div></div>
+          <div class="field"><label>현재 보유개수</label><div class="iw"><input type="number" inputmode="decimal" id="curQty" step="1"><span class="u">주</span></div></div>
         </div>
-        <div class="field"><label>현재 Pool 잔액 <small>(증권사 예수금 그대로)</small></label><div class="iw"><input type="number" id="curPool" step="0.01"><span class="u">$</span></div></div>
+        <div class="field"><label>현재 Pool 잔액 <small>(증권사 예수금 그대로)</small></label><div class="iw"><input type="number" inputmode="decimal" id="curPool" step="0.01"><span class="u">$</span></div></div>
         <div class="field"><label>이번 회차 날짜 <small>(G값 산출 기준)</small></label><div class="iw" style="padding-right:0;"><input type="date" id="roundDate" style="font-family:var(--mono);font-size:13px;padding:9px 10px;"></div></div>
         <button class="btn primary" id="calcRound">이번 회차 계산</button>
         <button class="btn ghost mt8" id="commitRound" style="display:none;">이대로 기록하고 다음 회차로 →</button>
