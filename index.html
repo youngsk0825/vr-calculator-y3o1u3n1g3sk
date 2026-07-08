@@ -61,6 +61,10 @@
 
   .btn{border-radius:8px;padding:11px;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);width:100%;}
   .btn.primary{background:var(--band);border-color:var(--band);color:#06121b;}
+  #fillActionSeg button{background:var(--surface-2);border:1px solid var(--line);color:var(--ink-dim);border-radius:7px;padding:9px 4px;font-size:12.5px;font-weight:600;}
+  #fillActionSeg button[data-fa="buy"][aria-pressed="true"]{background:rgba(63,185,138,0.15);border-color:var(--buy);color:var(--buy);}
+  #fillActionSeg button[data-fa="sell"][aria-pressed="true"]{background:rgba(224,137,74,0.15);border-color:var(--sell);color:var(--sell);}
+  #fillActionSeg button[data-fa="hold"][aria-pressed="true"]{background:var(--surface-2);border-color:var(--ink-dim);color:var(--ink);}
   .btn:hover{border-color:var(--band);}
   .btn.ghost{background:none;}
   .btn.danger:hover{border-color:var(--neg);color:var(--neg);}
@@ -169,16 +173,37 @@
         <div class="setup-chips" id="setupChips"></div>
       </div>
 
-      <div class="card pad" id="roundCard" style="display:none;">
-        <div class="ch"><span>이번 회차 입력</span><span class="mono" id="roundNoLabel" style="color:var(--band)"></span></div>
+      <!-- 시그널 섹션: 다음 차수 전날(D+13)에 보는 예고 -->
+      <div class="card pad" id="signalCard" style="display:none;">
+        <div class="ch"><span>다음 차수 시그널</span><span class="mono" id="signalNoLabel" style="color:var(--band)"></span></div>
+        <p style="font-size:11.5px;color:var(--ink-dim);margin-bottom:12px;">거래 예정일 <b>전날 종가</b>와 현재 보유개수로 내일 걸 LOC 방향·지정가를 미리 계산합니다. (기록되지 않는 예측)</p>
         <div class="g2">
-          <div class="field"><label>현재 종가</label><div class="iw"><input type="number" inputmode="decimal" id="curPrice" step="0.01"><span class="u">$</span></div></div>
-          <div class="field"><label>현재 보유개수</label><div class="iw"><input type="number" inputmode="decimal" id="curQty" step="1"><span class="u">주</span></div></div>
+          <div class="field"><label>전날 종가</label><div class="iw"><input type="number" inputmode="decimal" id="sigPrice" step="0.01"><span class="u">$</span></div></div>
+          <div class="field"><label>현재 보유개수</label><div class="iw"><input type="number" inputmode="decimal" id="sigQty" step="1"><span class="u">주</span></div></div>
         </div>
-        <div class="field"><label>현재 Pool 잔액 <small>(증권사 예수금 그대로)</small></label><div class="iw"><input type="number" inputmode="decimal" id="curPool" step="0.01"><span class="u">$</span></div></div>
-        <div class="field"><label>이번 회차 날짜 <small>(G값 산출 기준)</small></label><div class="iw" style="padding-right:0;"><input type="date" id="roundDate" style="font-family:var(--mono);font-size:13px;padding:9px 10px;"></div></div>
-        <button class="btn primary" id="calcRound">이번 회차 계산</button>
-        <button class="btn ghost mt8" id="commitRound" style="display:none;">이대로 기록하고 다음 회차로 →</button>
+        <div class="field"><label>예정일 <small>(G값 산출 기준)</small></label><div class="iw" style="padding-right:0;"><input type="date" id="sigDate" style="font-family:var(--mono);font-size:13px;padding:9px 10px;"></div></div>
+        <button class="btn primary" id="calcSignal">시그널 계산</button>
+        <div class="locked-note" id="sigPoolNote"></div>
+      </div>
+
+      <!-- 확정 섹션: 거래 후 실측 입력 -->
+      <div class="card pad" id="confirmCard" style="display:none;">
+        <div class="ch"><span>체결 결과 확정</span><span class="mono" id="confirmNoLabel" style="color:var(--pos)"></span></div>
+        <p style="font-size:11.5px;color:var(--ink-dim);margin-bottom:12px;">거래 체결 후 <b>실제 값</b>을 입력해 확정 기록합니다. 이 값이 다음 시그널의 기준이 됩니다.</p>
+        <div class="field"><label>체결 방향</label>
+          <div class="seg3" id="fillActionSeg" role="group" style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;">
+            <button type="button" data-fa="buy" aria-pressed="false">매수</button>
+            <button type="button" data-fa="sell" aria-pressed="false">매도</button>
+            <button type="button" data-fa="hold" aria-pressed="true">거래없음</button>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="field"><label>실제 체결 종가</label><div class="iw"><input type="number" inputmode="decimal" id="curPrice" step="0.01"><span class="u">$</span></div></div>
+          <div class="field"><label>체결 수량</label><div class="iw"><input type="number" inputmode="decimal" id="fillQty" step="1"><span class="u">주</span></div></div>
+        </div>
+        <div class="field"><label>거래일 <small>(G값 산출 기준)</small></label><div class="iw" style="padding-right:0;"><input type="date" id="roundDate" style="font-family:var(--mono);font-size:13px;padding:9px 10px;"></div></div>
+        <button class="btn primary" id="calcRound">확정 미리보기</button>
+        <button class="btn ghost mt8" id="commitRound" style="display:none;">이 회차 확정 기록 →</button>
         <button class="btn ghost danger mt8" id="undoRound" style="display:none;">마지막 회차 취소</button>
       </div>
     </aside>
@@ -263,6 +288,7 @@
 const SK="vr_setup_v1", HK="vr_history_v1";
 const $=id=>document.getElementById(id);
 let setup=null, history=[], pending=null, charts={};
+let signalPreview=null, fillAction="hold";
 
 /* ---- 유틸 ---- */
 function r2(n){return Math.round(n*100)/100;}
@@ -304,58 +330,80 @@ function nextV(prevV, prevPool, prevEval, G, contrib){
   return r2(prevV + prevPool/G + (prevEval-prevV)/(2*Math.sqrt(G))) + contrib;
 }
 
-/* ---- 한 회차 상태 계산 ---- */
-function computeRound(prev, curPrice, curQty, roundDate, curPool){
-  // prev: 직전 회차 기록 {V,pool,qty,price,...} | 1회차면 setup 기반
+/* ---- 다음 차수 시그널 계산 (예측용, 저장 안 함) ----
+   prev: 직전 확정 회차 | 입력: 전날 종가, 현재 보유개수, 예정일
+   가용 Pool = 직전 확정 Pool + 적립금 (아직 이번 거래 전) */
+function computeSignal(prev, price, qty, sigDate){
   const roundNo = prev==null?1:(prev.roundNo+1);
-  const asOf = roundDate || new Date().toISOString().slice(0,10);
-  const G=calcG(setup.startDate, asOf), contrib=setup.contrib;   // G값은 시작일로부터 경과한 실제 연차로 자동 산출
+  const asOf = sigDate || new Date().toISOString().slice(0,10);
+  const G=calcG(setup.startDate, asOf), contrib=setup.contrib;
   let V;
   if(prev==null){ V=setup.startV; }
   else { V=nextV(prev.V, prev.pool, prev.evalAmt, G, contrib); }
   const minB=r2(V*0.85), maxB=r2(V*1.15);
-  const evalAmt=r2(curQty*curPrice);
-  // Pool: 사용자가 입력한 실제 잔액(증권사 예수금)을 그대로 사용.
-  // 미입력 시(하위호환) 기존 방식(직전 Pool + 적립금)으로 대체
-  const poolBase = (curPool!=null && !Number.isNaN(curPool))
-    ? r2(curPool)
-    : (prev==null ? setup.startPool : r2(prev.pool + contrib));
-  // 투자원금: 시작 시점엔 (시작 Pool + 시작 주식 매입금) 전체 투입 자본, 이후 회차마다 적립금 누적
-  const startPrincipal = setup.startPool + r2(setup.startQty*setup.startPrice);
-  const principal = prev==null ? r2(startPrincipal) : r2((prev.principal||startPrincipal) + contrib);
+  const evalAmt=r2(qty*price);
+  // 시그널 시점 가용 Pool: 직전 확정 Pool + 이번 회차 적립금
+  const poolBase = prev==null ? setup.startPool : r2(prev.pool + contrib);
 
-  // 밴드 판정
-  let action="hold", gap=0, tradeQty=0, tradeCash=0, newQty=curQty, newPool=poolBase;
+  let action="hold", gap=0, tradeQty=0, tradeCash=0;
   if(evalAmt < minB){
     action="buy";
-    // 평가금을 목표선 V까지 끌어올리기 위해 필요한 매수금 (VR 원래 의도: 밴드 하단이 아니라 중심선 V로 복귀)
-    const targetCash = V - evalAmt;                // 목표선 V 복귀에 필요한 금액
-    const limitCash = poolBase * (setup.buyLimit/100); // 매수한도(사용자 설정)
+    const targetCash = V - evalAmt;
+    const limitCash = poolBase * (setup.buyLimit/100);
     tradeCash = Math.min(targetCash, limitCash, poolBase);
-    tradeQty = Math.floor(tradeCash / curPrice);
-    tradeCash = r2(tradeQty*curPrice);
-    newQty = curQty + tradeQty;
-    newPool = r2(poolBase - tradeCash);
+    tradeQty = Math.floor(tradeCash / price);
+    tradeCash = r2(tradeQty*price);
     gap = r2(minB - evalAmt);
   } else if(evalAmt > maxB){
     action="sell";
-    const targetCash = evalAmt - V;                // 목표선 V 복귀 (매수와 대칭)
-    tradeQty = Math.floor(targetCash / curPrice);
-    tradeQty = Math.min(tradeQty, curQty);
-    tradeCash = r2(tradeQty*curPrice);
-    newQty = curQty - tradeQty;
-    newPool = r2(poolBase + tradeCash);
+    const targetCash = evalAmt - V;
+    tradeQty = Math.min(Math.floor(targetCash / price), qty);
+    tradeCash = r2(tradeQty*price);
     gap = r2(evalAmt - maxB);
   }
-  const evalAfter = r2(newQty*curPrice);
-  const account = r2(newPool + evalAfter);
+  // 매수한도 부족 경고: 매수인데 한도/Pool 때문에 V 복귀에 못 미치는 경우
+  let limitShort=0;
+  if(action==="buy"){
+    const needCash=V-evalAmt, limitCash=poolBase*(setup.buyLimit/100);
+    if(Math.min(limitCash,poolBase) < needCash) limitShort=r2(needCash-Math.min(limitCash,poolBase));
+  }
+  return { roundNo, G, date:asOf, V, minB, maxB, price, qty, evalAmt,
+           action, gap, tradeQty, tradeCash, poolBase, limitShort };
+}
+
+/* ---- 체결 확정 계산 (실제 체결 입력을 누적, 저장용) ----
+   입력: 실제 체결 종가, 방향(buy/sell/hold), 체결 수량, 거래일
+   새 보유 = 직전 ± 체결수량 / 새 Pool = 직전 확정 Pool + 적립금 ∓ 체결대금 */
+function computeConfirm(prev, price, fillAction, fillQty, roundDate){
+  const roundNo = prev==null?1:(prev.roundNo+1);
+  const asOf = roundDate || new Date().toISOString().slice(0,10);
+  const G=calcG(setup.startDate, asOf), contrib=setup.contrib;
+  let V;
+  if(prev==null){ V=setup.startV; }
+  else { V=nextV(prev.V, prev.pool, prev.evalAmt, G, contrib); }
+  const minB=r2(V*0.85), maxB=r2(V*1.15);
+
+  const prevQty = prev==null ? setup.startQty : prev.qty;
+  // 이번 회차 시작 Pool = 직전 확정 Pool + 적립금
+  const poolStart = prev==null ? setup.startPool : r2(prev.pool + contrib);
+
+  let action=fillAction||"hold";
+  let tradeQty = (action==="hold") ? 0 : Math.abs(fillQty||0);
+  let tradeCash = r2(tradeQty*price);
+  let newQty=prevQty, newPool=poolStart;
+  if(action==="buy"){ newQty=prevQty+tradeQty; newPool=r2(poolStart - tradeCash); }
+  else if(action==="sell"){ newQty=Math.max(0,prevQty-tradeQty); newPool=r2(poolStart + tradeCash); }
+
+  const evalAmt=r2(newQty*price);            // 확정 후 평가금(다음 V의 직전평가금으로 사용)
+  const startPrincipal = setup.startPool + r2(setup.startQty*setup.startPrice);
+  const principal = prev==null ? r2(startPrincipal) : r2((prev.principal||startPrincipal) + contrib);
+  const account = r2(newPool + evalAmt);
   const roi = principal>0 ? account/principal-1 : 0;
   return {
-    roundNo, G, date: asOf,
-    V, minB, maxB, price:curPrice, qty:curQty,
-    evalAmt, action, gap, tradeQty, tradeCash,
-    newQty, pool:newPool, principal, evalAfter, account, roi,
-    poolBefore: poolBase
+    roundNo, G, date:asOf, V, minB, maxB, price,
+    qty:newQty, evalAmt, action, tradeQty, tradeCash,
+    pool:newPool, principal, evalAfter:evalAmt, account, roi,
+    poolBefore: poolStart
   };
 }
 
@@ -406,7 +454,8 @@ function renderSetupChips(){
     <span class="chip">현재 G <b>${todayG}</b> <small style="color:var(--ink-faint)">자동</small></span>
     <span class="chip">간격 <b>${setup.qtyStep}주</b></span>
     <span class="chip">한도 <b>${setup.buyLimit}%</b></span>`;
-  $("roundCard").style.display="block";
+  $("signalCard").style.display="block";
+  $("confirmCard").style.display="block";
   $("emptyState").style.display="none";
   $("dash").style.display="block";
 }
@@ -415,7 +464,8 @@ function renderSetupChips(){
 function showWelcome(){
   $("welcomeCard").style.display="block";
   $("setupCard").style.display="none";
-  $("roundCard").style.display="none";
+  $("signalCard").style.display="none";
+  $("confirmCard").style.display="none";
   $("emptyState").style.display="block";
   $("dash").style.display="none";
 }
@@ -431,6 +481,26 @@ function showSetupForm(prefill){
     $("startPool").value=10000; $("contrib").value=0; $("startDate").value=d.toISOString().slice(0,10);
     $("startQty").value=483; $("startPrice").value=76.83; $("qtyStep").value=4; $("buyLimit").value=25;
   }
+}
+
+/* ---- 시그널(다음 차수 예고) 표시 ---- */
+function renderSignal(sig){
+  // 액션 배너를 시그널용으로 표시
+  const b=$("actionBanner");
+  b.className="action "+sig.action;
+  const map={buy:["다음 차수 · 매수 시그널",`${sig.tradeQty}주 LOC 매수`],
+             sell:["다음 차수 · 매도 시그널",`${sig.tradeQty}주 LOC 매도`],
+             hold:["다음 차수 · 대기",`밴드 안 — 거래 없음`]};
+  $("actLab").textContent=map[sig.action][0];
+  $("actBig").textContent=map[sig.action][1];
+  let det;
+  if(sig.action==="buy") det=`전날 평가금 ${money(sig.evalAmt)} < 최소 ${money(sig.minB)} · 목표 V ${money(sig.V)}까지 약 ${money(sig.tradeCash)} 매수`;
+  else if(sig.action==="sell") det=`전날 평가금 ${money(sig.evalAmt)} > 최대 ${money(sig.maxB)} · 목표 V ${money(sig.V)}까지 약 ${money(sig.tradeCash)} 매도`;
+  else det=`전날 평가금 ${money(sig.evalAmt)} 은 밴드 ${money(sig.minB)} ~ ${money(sig.maxB)} 안 — 주문 없음`;
+  if(sig.limitShort>0) det+=` · ⚠ 매수한도로 V 복귀까지 ${money(sig.limitShort)} 부족`;
+  $("actDetail").textContent=det;
+  // 주문표: 시그널 잔여개수 기준
+  renderOrders({action:sig.action, qty:sig.qty, minB:sig.minB, maxB:sig.maxB, poolBefore:sig.poolBase});
 }
 
 function renderAction(rd){
@@ -579,15 +649,12 @@ $("saveSetup").addEventListener("click",()=>{
   const s=readSetup(); const e=validSetup(s);
   if(e.length){ toast("확인 필요: "+e.join(", ")); return; }
   setup=s;
-  // 1회차를 시작 입력값으로 자동 기록 (1회차 날짜 = 투자 시작일)
-  const rd=computeRound(null, s.startPrice, s.startQty, s.startDate);
+  // 1회차를 시작 입력값으로 확정 기록 (거래없음, 날짜=투자 시작일)
+  const rd=computeConfirm(null, s.startPrice, "hold", 0, s.startDate);
   history=[rd];
   persist();
   renderSetupChips();
-  $("curPrice").value=s.startPrice; $("curQty").value=rd.newQty;
-  // 다음 회차 입력 날짜는 시작일+14일을 기본값으로 제안
-  const next=new Date(s.startDate); next.setDate(next.getDate()+14);
-  $("roundDate").value=next.toISOString().slice(0,10);
+  prefillSignalFromLast();
   refreshAll(null);
   toast("1회차 시작됨");
 });
@@ -598,15 +665,42 @@ $("editSetup").addEventListener("click",()=>{
   $("editSetup").style.display="none";
 });
 
-$("calcRound").addEventListener("click",()=>{
-  const price=parseFloat($("curPrice").value), qty=parseFloat($("curQty").value);
-  const curPool=parseFloat($("curPool").value);
-  const roundDate=$("roundDate").value;
-  if(!(price>0)||Number.isNaN(qty)||qty<0){ toast("종가와 보유개수를 확인하세요"); return; }
-  if(Number.isNaN(curPool)||curPool<0){ toast("현재 Pool 잔액(예수금)을 입력하세요"); return; }
-  if(!roundDate){ toast("이번 회차 날짜를 입력하세요"); return; }
+/* ---- 체결 방향 세그먼트 ---- */
+document.querySelectorAll("#fillActionSeg button").forEach(b=>b.addEventListener("click",()=>{
+  fillAction=b.dataset.fa;
+  document.querySelectorAll("#fillActionSeg button").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  // 거래없음이면 수량칸 비활성 느낌
+  $("fillQty").disabled = (fillAction==="hold");
+}));
+
+/* ---- 시그널 계산 ---- */
+$("calcSignal").addEventListener("click",()=>{
+  const price=parseFloat($("sigPrice").value), qty=parseFloat($("sigQty").value);
+  const sigDate=$("sigDate").value;
+  if(!(price>0)||Number.isNaN(qty)||qty<0){ toast("전날 종가와 보유개수를 확인하세요"); return; }
+  if(!sigDate){ toast("예정일을 입력하세요"); return; }
   const prev=history[history.length-1];
-  pending=computeRound(prev, price, qty, roundDate, curPool);
+  signalPreview=computeSignal(prev, price, qty, sigDate);
+  renderSignal(signalPreview);
+  // 확정 섹션 종가·방향·수량 기본 제안 (시그널대로 체결 가정)
+  $("curPrice").value=price;
+  fillAction=signalPreview.action;
+  document.querySelectorAll("#fillActionSeg button").forEach(x=>x.setAttribute("aria-pressed", x.dataset.fa===fillAction));
+  $("fillQty").value = signalPreview.action==="hold"?"":signalPreview.tradeQty;
+  $("fillQty").disabled = (signalPreview.action==="hold");
+  $("roundDate").value=sigDate;
+});
+
+/* ---- 확정 미리보기 ---- */
+$("calcRound").addEventListener("click",()=>{
+  const price=parseFloat($("curPrice").value);
+  const roundDate=$("roundDate").value;
+  const fq=parseFloat($("fillQty").value);
+  if(!(price>0)){ toast("실제 체결 종가를 확인하세요"); return; }
+  if(fillAction!=="hold" && (!(fq>0))){ toast("체결 수량을 입력하세요"); return; }
+  if(!roundDate){ toast("거래일을 입력하세요"); return; }
+  const prev=history[history.length-1];
+  pending=computeConfirm(prev, price, fillAction, fillAction==="hold"?0:fq, roundDate);
   refreshAll(pending);
   $("commitRound").style.display="block";
   $("undoRound").style.display = history.length>1 ? "block":"none";
@@ -616,27 +710,42 @@ $("commitRound").addEventListener("click",()=>{
   if(!pending) return;
   history.push(pending);
   persist();
-  pending=null;
+  pending=null; signalPreview=null;
   $("commitRound").style.display="none";
   $("undoRound").style.display="block";
-  const last=history[history.length-1];
-  $("curQty").value=last.newQty;
-  // Pool은 실제 잔액을 새로 입력받아야 하므로 비우고, 앱 예상값을 참고용 placeholder로 표시
-  $("curPool").value="";
-  $("curPool").placeholder="예상 "+Math.round(last.pool + setup.contrib);
-  const next=new Date(last.date); next.setDate(next.getDate()+14);
-  $("roundDate").value=next.toISOString().slice(0,10);
+  prefillSignalFromLast();
   refreshAll(null);
-  toast(history.length+"회차 기록됨");
+  toast(history.length+"회차 확정됨");
 });
 
 $("undoRound").addEventListener("click",()=>{
   if(history.length<=1){ toast("1회차는 취소할 수 없습니다"); return; }
   history.pop(); persist(); pending=null;
   $("commitRound").style.display="none";
+  prefillSignalFromLast();
   refreshAll(null);
   toast("마지막 회차 취소됨");
 });
+
+/* ---- 다음 시그널 입력 기본값 채우기 ---- */
+function prefillSignalFromLast(){
+  const last=history[history.length-1];
+  if(!last) return;
+  const next=new Date(last.date); next.setDate(next.getDate()+14);
+  const nextStr=next.toISOString().slice(0,10);
+  $("sigQty").value=last.qty;                 // 현재 보유개수(직전 확정)
+  $("sigDate").value=nextStr;
+  $("sigPrice").value="";
+  $("signalNoLabel").textContent=(last.roundNo+1)+"차 예정";
+  $("confirmNoLabel").textContent=(last.roundNo+1)+"차";
+  // 확정칸 초기화
+  $("curPrice").value=""; $("fillQty").value=""; $("roundDate").value=nextStr;
+  fillAction="hold";
+  document.querySelectorAll("#fillActionSeg button").forEach(x=>x.setAttribute("aria-pressed", x.dataset.fa==="hold"));
+  $("fillQty").disabled=true;
+  // 시그널 가용 Pool 안내
+  $("sigPoolNote").textContent="시그널 가용 Pool = 직전 확정 "+money(last.pool)+" + 적립 "+money(setup.contrib)+" = "+money(last.pool+setup.contrib);
+}
 
 /* ---- 파일 데이터로 복원(공통) ---- */
 function loadFromData(data){
@@ -649,12 +758,7 @@ function loadFromData(data){
   $("buyLimit").value=setup.buyLimit;
   renderSetupChips();
   if(history.length){
-    const last=history[history.length-1];
-    $("curPrice").value=last.price; $("curQty").value=last.newQty;
-    $("curPool").value="";
-    $("curPool").placeholder="예상 "+Math.round(last.pool + setup.contrib);
-    const next=new Date(last.date); next.setDate(next.getDate()+14);
-    $("roundDate").value=next.toISOString().slice(0,10);
+    prefillSignalFromLast();
     $("undoRound").style.display=history.length>1?"block":"none";
     $("commitRound").style.display="none";
   }
@@ -729,10 +833,15 @@ $("themeBtn").addEventListener("click",()=>{
 function refreshAll(previewRd){
   const showRd = previewRd || history[history.length-1];
   if(!showRd) return;
-  $("roundNoLabel").textContent = (previewRd?previewRd.roundNo:history.length+1)+"회차";
-  renderAction(showRd);
+  // 액션 배너·주문표: 시그널이 계산돼 있으면 시그널 우선, 아니면 현재 확정 상태
+  if(signalPreview && !previewRd){
+    renderSignal(signalPreview);
+  } else {
+    renderAction(showRd);
+    renderOrders(showRd);
+  }
+  // KPI·기록·차트는 확정 기록 기준
   renderKpis(showRd);
-  renderOrders(showRd);
   renderHistory();
   renderFormula();
   renderCharts(previewRd);
@@ -748,12 +857,7 @@ if(setup){
   $("qtyStep").value=setup.qtyStep; $("buyLimit").value=setup.buyLimit;
   renderSetupChips();
   if(history.length){
-    const last=history[history.length-1];
-    $("curPrice").value=last.price; $("curQty").value=last.newQty;
-    $("curPool").value="";
-    $("curPool").placeholder="예상 "+Math.round(last.pool + setup.contrib);
-    const next=new Date(last.date); next.setDate(next.getDate()+14);
-    $("roundDate").value=next.toISOString().slice(0,10);
+    prefillSignalFromLast();
     $("undoRound").style.display = history.length>1?"block":"none";
     refreshAll(null);
   }
