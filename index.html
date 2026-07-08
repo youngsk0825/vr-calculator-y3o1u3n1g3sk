@@ -238,7 +238,7 @@
         <section class="tp active" id="tp-orders">
           <div class="card pad">
             <div class="ch"><span id="orderTitle">지정가 주문표</span></div>
-            <div class="scroll"><table id="orderTable"><thead></thead><tbody></tbody></table></div>
+            <div class="scroll"><div id="orderTable"></div></div>
           </div>
         </section>
 
@@ -409,33 +409,32 @@ function computeConfirm(prev, price, fillAction, fillQty, roundDate){
 
 /* ---- 단계별 지정가 주문표 (시트 U~AC) ---- */
 function buildOrderTable(round){
-  const step=setup.qtyStep, rows=[];
+  const step=setup.qtyStep;
   const baseQty = round.qty;
-  if(round.action==="buy" || round.action==="hold"){
-    // 매수 밴드: 잔여개수를 step씩 늘리며 최소값/직전잔여 가격 생성
-    let rem=baseQty, pool=round.poolBefore;
-    for(let i=1;i<=12;i++){
-      const price = r2(round.minB / rem);
-      const spend = r2(price*step);
-      pool = r2(pool - spend);
-      rows.push({step:i, side:"buy", qty:step, price, remAfter:rem+step, poolAfter:pool});
-      rem += step;
-      if(pool<=0) break;
-    }
+  const buyRows=[], sellRows=[];
+  // 매수 밴드: 최소값 ÷ 직전 잔여개수, 잔여개수를 step씩 늘리며 가격 하락 (시트 W열)
+  let rem=baseQty, pool=round.poolBefore, cum=0;
+  for(let i=1;i<=12;i++){
+    const price = r2(round.minB / rem);      // 시트: W = 최소값 / 직전잔여
+    const spend = r2(price*step);
+    if(pool - spend < 0) break;              // Pool 소진 시 중단
+    pool = r2(pool - spend);
+    cum += step;
+    buyRows.push({step:i, qty:step, cumQty:cum, price, remAfter:rem+step, poolAfter:pool});
+    rem += step;
   }
-  const sellRows=[];
-  if(round.action==="sell" || round.action==="hold"){
-    let rem=baseQty, pool=round.poolBefore;
-    for(let i=1;i<=12;i++){
-      const price = r2(round.maxB / rem);
-      const gain = r2(price*step);
-      pool = r2(pool + gain);
-      rem -= step;
-      if(rem<0) break;
-      sellRows.push({step:i, side:"sell", qty:step, price, remAfter:rem, poolAfter:pool});
-    }
+  // 매도 밴드: 최대값 ÷ 직전 잔여개수, 잔여개수를 step씩 줄이며 가격 상승 (시트 AB열)
+  rem=baseQty; pool=round.poolBefore; cum=0;
+  for(let i=1;i<=12;i++){
+    const price = r2(round.maxB / rem);      // 시트: AB = 최대값 / 직전잔여
+    if(rem - step < 0) break;                // 보유 소진 시 중단
+    const gain = r2(price*step);
+    pool = r2(pool + gain);
+    cum += step;
+    rem -= step;
+    sellRows.push({step:i, qty:step, cumQty:cum, price, remAfter:rem, poolAfter:pool});
   }
-  return {buy:rows, sell:sellRows};
+  return {buy:buyRows, sell:sellRows};
 }
 
 /* ==================== 렌더 ==================== */
@@ -483,24 +482,24 @@ function showSetupForm(prefill){
   }
 }
 
-/* ---- 시그널(다음 차수 예고) 표시 ---- */
+/* ---- 시그널(다음 차수 예고) 표시 ----
+   원본 시트 철학: 전날 종가로 방향을 단정하지 않고, V·보유개수 기준 매수/매도 지정가표를
+   양쪽 다 걸어둔다. 전날 종가 기준 방향은 '참고용'으로만 배너에 표시. */
 function renderSignal(sig){
-  // 액션 배너를 시그널용으로 표시
   const b=$("actionBanner");
   b.className="action "+sig.action;
-  const map={buy:["다음 차수 · 매수 시그널",`${sig.tradeQty}주 LOC 매수`],
-             sell:["다음 차수 · 매도 시그널",`${sig.tradeQty}주 LOC 매도`],
-             hold:["다음 차수 · 대기",`밴드 안 — 거래 없음`]};
+  const map={buy:["다음 차수 · 참고: 매수 구간","양방향 지정가 주문"],
+             sell:["다음 차수 · 참고: 매도 구간","양방향 지정가 주문"],
+             hold:["다음 차수 · 참고: 밴드 안","양방향 지정가 주문"]};
   $("actLab").textContent=map[sig.action][0];
   $("actBig").textContent=map[sig.action][1];
-  let det;
-  if(sig.action==="buy") det=`전날 평가금 ${money(sig.evalAmt)} < 최소 ${money(sig.minB)} · 목표 V ${money(sig.V)}까지 약 ${money(sig.tradeCash)} 매수`;
-  else if(sig.action==="sell") det=`전날 평가금 ${money(sig.evalAmt)} > 최대 ${money(sig.maxB)} · 목표 V ${money(sig.V)}까지 약 ${money(sig.tradeCash)} 매도`;
-  else det=`전날 평가금 ${money(sig.evalAmt)} 은 밴드 ${money(sig.minB)} ~ ${money(sig.maxB)} 안 — 주문 없음`;
-  if(sig.limitShort>0) det+=` · ⚠ 매수한도로 V 복귀까지 ${money(sig.limitShort)} 부족`;
+  let det=`목표선 V ${money(sig.V)} · 밴드 ${money(sig.minB)} ~ ${money(sig.maxB)} · 보유 ${num(sig.qty)}주. `;
+  if(sig.action==="buy") det+=`전날 종가 기준으론 매수 구간이지만, 당일 LOC가 어디서 끝날지 모르니 아래 매수·매도 지정가를 모두 걸어두세요.`;
+  else if(sig.action==="sell") det+=`전날 종가 기준으론 매도 구간이지만, 당일 LOC 대비 아래 매수·매도 지정가를 모두 걸어두세요.`;
+  else det+=`전날 종가 기준으론 밴드 안이지만, 당일 종가가 크게 움직일 수 있으니 아래 양방향 지정가를 걸어두세요.`;
   $("actDetail").textContent=det;
-  // 주문표: 시그널 잔여개수 기준
-  renderOrders({action:sig.action, qty:sig.qty, minB:sig.minB, maxB:sig.maxB, poolBefore:sig.poolBase});
+  // 항상 양방향 지정가표 (전날 종가 무관, V·보유개수 기준)
+  renderOrders({qty:sig.qty, minB:sig.minB, maxB:sig.maxB, poolBase:sig.poolBase, V:sig.V, price:sig.price}, true);
 }
 
 function renderAction(rd){
@@ -530,25 +529,44 @@ function renderKpis(rd){
   $("kpis").innerHTML=cards.map(c=>`<div class="kpi"><div class="k">${c.k}</div><div class="v ${c.cls||''}">${c.v}</div><div class="s">${c.s}</div></div>`).join("");
 }
 
-function renderOrders(rd){
-  const o=buildOrderTable(rd);
-  $("orderTitle").textContent = rd.action==="buy"?"매수 지정가 주문표 (하락 대비)"
-    : rd.action==="sell"?"매도 지정가 주문표 (상승 대비)"
-    : "지정가 주문표 (양방향 대비)";
-  let html="";
-  if(o.buy.length){
-    html+=`<tr><th>매수단계</th><th>수량</th><th>매수 지정가</th><th>매수 후 개수</th><th>Pool 잔액</th></tr>`;
-    html=`<thead>${html}</thead><tbody>`+o.buy.map(x=>
-      `<tr><td><span class="badge buy">B${x.step}</span></td><td>${x.qty}</td><td class="buy">${money(x.price,2)}</td><td>${num(x.remAfter)}</td><td>${money(x.poolAfter)}</td></tr>`).join("");
-    if(o.sell.length) html+=`<tr><td colspan="5" style="border-top:2px solid var(--line)"></td></tr>`;
-  } else html="<thead></thead><tbody>";
-  if(o.sell.length){
-    if(!o.buy.length) html=`<thead><tr><th>매도단계</th><th>수량</th><th>매도 지정가</th><th>매도 후 개수</th><th>Pool 잔액</th></tr></thead><tbody>`;
-    html+=o.sell.map(x=>
-      `<tr><td><span class="badge sell">S${x.step}</span></td><td>${x.qty}</td><td class="sell">${money(x.price,2)}</td><td>${num(x.remAfter)}</td><td>${money(x.poolAfter)}</td></tr>`).join("");
+function renderOrders(rd, isSignal){
+  // buildOrderTable은 poolBefore를 참조 → 시그널이면 poolBase를 매핑
+  const src = { qty:rd.qty, minB:rd.minB, maxB:rd.maxB, poolBefore: rd.poolBefore!=null?rd.poolBefore:rd.poolBase };
+  const o=buildOrderTable(src);
+  $("orderTitle").textContent = isSignal ? "양방향 지정가 주문표 (당일 LOC 대비)" : "지정가 주문표";
+
+  // V까지 복귀에 필요한 총 수량(참고): 현재 평가금 기준
+  let note="";
+  if(isSignal && rd.V){
+    const curEval = r2(rd.qty*rd.price);
+    if(curEval < rd.minB){
+      const need=Math.floor((rd.V-curEval)/rd.price);
+      note=`<div class="muted" style="margin-bottom:8px">참고 · 전날 종가 ${money(rd.price,2)} 유지 시 V 복귀에 약 <b style="color:var(--buy)">${need}주 매수</b> 필요</div>`;
+    } else if(curEval > rd.maxB){
+      const need=Math.min(rd.qty,Math.floor((curEval-rd.V)/rd.price));
+      note=`<div class="muted" style="margin-bottom:8px">참고 · 전날 종가 ${money(rd.price,2)} 유지 시 V 복귀에 약 <b style="color:var(--sell)">${need}주 매도</b> 필요</div>`;
+    } else {
+      note=`<div class="muted" style="margin-bottom:8px">참고 · 전날 종가 ${money(rd.price,2)} 기준 평가금은 밴드 안 (거래 없음)</div>`;
+    }
   }
-  html+="</tbody>";
-  $("orderTable").innerHTML=html;
+
+  // 매수표
+  let buyHtml="";
+  if(o.buy.length){
+    buyHtml=`<div style="font-size:11px;color:var(--buy);font-weight:600;margin:4px 0 6px">▼ 매수 (종가가 이 값 이하로 내려오면)</div>
+      <table><thead><tr><th>단계</th><th>수량</th><th>누적</th><th>매수 지정가</th><th>매수 후 개수</th><th>Pool 잔액</th></tr></thead><tbody>`+
+      o.buy.map(x=>`<tr><td><span class="badge buy">B${x.step}</span></td><td>${x.qty}</td><td>${x.cumQty}</td><td class="buy">${money(x.price,2)}</td><td>${num(x.remAfter)}</td><td>${money(x.poolAfter)}</td></tr>`).join("")+
+      `</tbody></table>`;
+  }
+  // 매도표
+  let sellHtml="";
+  if(o.sell.length){
+    sellHtml=`<div style="font-size:11px;color:var(--sell);font-weight:600;margin:14px 0 6px">▲ 매도 (종가가 이 값 이상으로 올라가면)</div>
+      <table><thead><tr><th>단계</th><th>수량</th><th>누적</th><th>매도 지정가</th><th>매도 후 개수</th><th>Pool 잔액</th></tr></thead><tbody>`+
+      o.sell.map(x=>`<tr><td><span class="badge sell">S${x.step}</span></td><td>${x.qty}</td><td>${x.cumQty}</td><td class="sell">${money(x.price,2)}</td><td>${num(x.remAfter)}</td><td>${money(x.poolAfter)}</td></tr>`).join("")+
+      `</tbody></table>`;
+  }
+  $("orderTable").innerHTML = `${note}${buyHtml}${sellHtml}`;
 }
 
 function renderHistory(){
